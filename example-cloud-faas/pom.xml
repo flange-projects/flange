@@ -13,11 +13,33 @@
 	<packaging>pom</packaging>
 
 	<modules>
+		<module>app</module>
 		<module>service-api</module>
 		<module>service-impl</module>
-		<module>cli</module>
 	</modules>
 
 	<name>Flange Example: Cloud FaaS</name>
 	<description>Flange cloud example application illustrating Function as a Service support.</description>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>dev.flange</groupId>
+				<artifactId>flange-example-cloud-faas-app</artifactId>
+				<version>0.1.0-SNAPSHOT</version>
+			</dependency>
+
+			<dependency>
+				<groupId>dev.flange</groupId>
+				<artifactId>flange-example-cloud-faas-service-api</artifactId>
+				<version>0.1.0-SNAPSHOT</version>
+			</dependency>
+
+			<dependency>
+				<groupId>dev.flange</groupId>
+				<artifactId>flange-example-cloud-faas-service-impl</artifactId>
+				<version>0.1.0-SNAPSHOT</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 </project>

@@ -12,4 +12,16 @@
 
 	<name>Flange Example: Cloud FaaS &gt; Service Implementation</name>
 	<description>Flange cloud FaaS example application service command-line application (CLI).</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-example-cloud-faas-service-api</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-cloud</artifactId>
+		</dependency>
+	</dependencies>
 </project>

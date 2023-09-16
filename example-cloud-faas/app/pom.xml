@@ -8,8 +8,20 @@
 		<version>0.1.0-SNAPSHOT</version>
 	</parent>
 
-	<artifactId>flange-example-cloud-faas-cli</artifactId>
+	<artifactId>flange-example-cloud-faas-app</artifactId>
 
-	<name>Flange Example: Cloud FaaS &gt; CLI</name>
+	<name>Flange Example: Cloud FaaS &gt; Application</name>
 	<description>Flange cloud FaaS example application service implementation.</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-example-cloud-faas-service-api</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-example-cloud-faas-service-impl</artifactId>
+		</dependency>
+	</dependencies>
 </project>
