@@ -9,8 +9,15 @@
 		<relativePath>../parent/pom.xml</relativePath>
 	</parent>
 
-	<artifactId>flange-cloud</artifactId>
+	<artifactId>flange-build</artifactId>
 
-	<name>Flange Cloud</name>
-	<description>Flange cloud definitions and API.</description>
+	<name>Flange Build</name>
+	<description>Flange build implementation.</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-cloud</artifactId>
+		</dependency>
+	</dependencies>
 </project>
