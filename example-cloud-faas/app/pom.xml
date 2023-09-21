@@ -23,5 +23,10 @@
 			<groupId>dev.flange</groupId>
 			<artifactId>flange-example-cloud-faas-service-impl</artifactId>
 		</dependency>
+
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-spring-simple-provider</artifactId>
+		</dependency>
 	</dependencies>
 </project>

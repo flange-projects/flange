@@ -23,8 +23,8 @@ import java.util.concurrent.*;
 
 import javax.annotation.*;
 
+import dev.flange.Flange;
 import dev.flange.example.cloud.faas.service.api.MessageService;
-import dev.flange.example.cloud.faas.service.impl.MessageServiceImpl;
 
 /**
  * Example application showing usage of a Flange Function-as-a-Service (FaaS).
@@ -44,8 +44,8 @@ public class ExampleFaasApp implements Runnable {
 
 	@Override
 	public void run() {
-		final CompletableFuture<String> futureGreeting = messageService.getGreeting().completeOnTimeout("Hi", 5, SECONDS);
-		final CompletableFuture<String> futureName = messageService.getName().completeOnTimeout("Everybody", 5, SECONDS);
+		final CompletableFuture<String> futureGreeting = messageService.getGreeting().completeOnTimeout("Hi (timeout)", 5, SECONDS);
+		final CompletableFuture<String> futureName = messageService.getName().completeOnTimeout("Everybody (timeout)", 5, SECONDS);
 
 		final String message;
 		try {
@@ -66,7 +66,8 @@ public class ExampleFaasApp implements Runnable {
 	 * @param args application arguments.
 	 */
 	public static void main(final String[] args) {
-		final ExampleFaasApp app = new ExampleFaasApp(new MessageServiceImpl());
+		final MessageService messageService = Flange.getDependencyConcern().getDependencyInstanceByType(MessageService.class);
+		final ExampleFaasApp app = new ExampleFaasApp(messageService);
 		app.run();
 	}
 

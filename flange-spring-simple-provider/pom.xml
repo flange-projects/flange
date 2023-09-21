@@ -9,15 +9,20 @@
 		<relativePath>../parent/pom.xml</relativePath>
 	</parent>
 
-	<artifactId>flange</artifactId>
+	<artifactId>flange-spring-simple-provider</artifactId>
 
-	<name>Flange</name>
-	<description>Flange dependency registration and injection.</description>
+	<name>Flange Spring Simple Provider</name>
+	<description>A Csar provider for Flange backed by a Spring context for simple dependency management.</description>
 
 	<dependencies>
 		<dependency>
-			<groupId>io.csar</groupId>
-			<artifactId>csar</artifactId>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-spring</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context</artifactId>
 		</dependency>
 	</dependencies>
 </project>
