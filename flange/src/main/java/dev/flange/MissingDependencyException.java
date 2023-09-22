@@ -25,7 +25,7 @@ import javax.annotation.*;
  * @apiNote Analogous to Spring <code>org.springframework.beans.factory.NoSuchBeanDefinitionException</code>.
  * @author Garret Wilson
  */
-public class MissingDependencyException extends IllegalStateException { //TODO extend a general DependencyException, which may extend ConfiguredStateException 
+public class MissingDependencyException extends DependencyException {
 
 	private static final long serialVersionUID = 1L;
 

@@ -35,6 +35,7 @@ public interface DependencyConcern extends Concern {
 	/**
 	 * Registers a dependency.
 	 * @param dependencyClass The concrete class of the dependency to be instantiated when needed.
+	 * @throws DependencyException if there is a general error registering the dependency.
 	 */
 	void registerDependency(@Nonnull final Class<?> dependencyClass); //TODO probably extract some registry interface and provide some less direct way to register dependencies, only allowed in certain states
 
@@ -44,6 +45,7 @@ public interface DependencyConcern extends Concern {
 	 * @param dependencyType The class representing the type of dependency.
 	 * @return An instance of the requested dependency.
 	 * @throws MissingDependencyException if an appropriate dependency of the requested type could not be found.
+	 * @throws DependencyException if there is some general error retrieving or creating the dependency.
 	 */
 	<T> T getDependencyInstanceByType(@Nonnull Class<T> dependencyType) throws MissingDependencyException;
 

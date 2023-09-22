@@ -22,6 +22,7 @@ import java.io.IOException;
 
 import javax.annotation.*;
 
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.support.*;
 import org.springframework.context.*;
@@ -59,15 +60,21 @@ public abstract class AbstractApplicationContextDependencyConcern<AC extends App
 		final GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
 		beanDefinition.setBeanClass(dependencyClass);
 		beanDefinition.setAutowireCandidate(true);
-		getBeanDefinitionRegistry().registerBeanDefinition(dependencyClass.getSimpleName(), beanDefinition);
+		try {
+			getBeanDefinitionRegistry().registerBeanDefinition(dependencyClass.getSimpleName(), beanDefinition);
+		} catch(final BeansException beansException) {
+			throw new DependencyException(beansException.getMessage(), beansException);
+		}
 	}
 
 	@Override
 	public <T> T getDependencyInstanceByType(final Class<T> dependencyType) throws MissingDependencyException {
 		try {
 			return getContainerInitialized().getBean(requireNonNull(dependencyType));
-		} catch(final NoSuchBeanDefinitionException noSuchBeanDefinitionException) { //TODO translate other Spring exceptions
-			throw new MissingDependencyException(dependencyType, noSuchBeanDefinitionException);
+		} catch(final NoSuchBeanDefinitionException noSuchBeanDefinitionException) {
+			throw new MissingDependencyException(noSuchBeanDefinitionException.getMessage(), dependencyType, noSuchBeanDefinitionException);
+		} catch(final BeansException beansException) {
+			throw new DependencyException(beansException.getMessage(), beansException);
 		}
 	}
 
@@ -79,7 +86,11 @@ public abstract class AbstractApplicationContextDependencyConcern<AC extends App
 	protected void initialize(final AC container) throws IOException {
 		super.initialize(container);
 		if(container instanceof ConfigurableApplicationContext configurableApplicationContext) {
-			configurableApplicationContext.refresh();//TODO catch and translate beans exception
+			try {
+				configurableApplicationContext.refresh();//TODO catch and translate beans exception
+			} catch(final BeansException beansException) {
+				throw new DependencyException(beansException.getMessage(), beansException);
+			}
 		}
 	}
 

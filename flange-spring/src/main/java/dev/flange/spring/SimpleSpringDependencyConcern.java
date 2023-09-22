@@ -33,7 +33,7 @@ public class SimpleSpringDependencyConcern extends AbstractApplicationContextDep
 
 	@Override
 	protected BeanDefinitionRegistry getBeanDefinitionRegistry() {
-		return getContainerInitialized();
+		return getContainer();
 	}
 
 }
