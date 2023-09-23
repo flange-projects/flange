@@ -35,6 +35,7 @@ public interface Flanged {
 	 * @param dependencyType The class representing the type of dependency.
 	 * @return An instance of the requested dependency.
 	 * @throws MissingDependencyException if an appropriate dependency of the requested type could not be found.
+	 * @throws DependencyException if there is some general error retrieving or creating the dependency.
 	 */
 	default <T> T getDependencyInstanceByType(@Nonnull Class<T> dependencyType) throws MissingDependencyException {
 		return Flange.getDependencyConcern().getDependencyInstanceByType(dependencyType);

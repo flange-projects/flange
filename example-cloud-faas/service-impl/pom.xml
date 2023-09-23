@@ -23,5 +23,12 @@
 			<groupId>dev.flange</groupId>
 			<artifactId>flange-cloud</artifactId>
 		</dependency>
+
+		<!-- TODO investigate adding dynamically with Flange,
+		or mark as provided and add separately for deployment -->
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-cloud-aws</artifactId>
+		</dependency>
 	</dependencies>
 </project>

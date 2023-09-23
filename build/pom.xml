@@ -16,6 +16,16 @@
 
 	<dependencies>
 		<dependency>
+			<groupId>com.globalmentor</groupId>
+			<artifactId>globalmentor-core</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>com.squareup</groupId>
+			<artifactId>javapoet</artifactId>
+		</dependency>
+
+		<dependency>
 			<groupId>dev.flange</groupId>
 			<artifactId>flange-cloud</artifactId>
 		</dependency>
