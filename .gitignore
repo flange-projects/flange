@@ -1,3 +1,5 @@
+setup/cloud/aws/aws-profile
+
 #Eclipse
 *.launch
 .buildpath
