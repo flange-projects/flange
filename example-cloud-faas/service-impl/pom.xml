@@ -31,4 +31,29 @@
 			<artifactId>flange-cloud-aws</artifactId>
 		</dependency>
 	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+						<configuration>
+							<!-- TODO find a way to add configurations dynamically, probably by developing a new Maven plugin and delegating to the Maven Assembly Plugin -->
+							<finalName>MessageServiceImpl_FlangeLambdaHandler</finalName> <!-- TODO include project in base name when generating from Maven plugin -->
+							<appendAssemblyId>true</appendAssemblyId>
+							<descriptors>
+								<descriptor>${project.build.directory}/generated-sources/annotations/assembly-MessageServiceImpl_FlangeLambdaHandler-aws-lambda.xml</descriptor>
+							</descriptors>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
 </project>
