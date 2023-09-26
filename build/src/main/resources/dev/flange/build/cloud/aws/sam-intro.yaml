@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform:
+  - AWS::LanguageExtensions
+  - AWS::Serverless-2016-10-31
+
+Description:
+  Flange service.
+
+Parameters:
+  Env:
+    Description: The token identifying the deployment environment, such as "dev", "dev3", or "dev-jdoe".
+    Type: String
+    AllowedPattern: '\w[\w-]*'
+    ConstraintDescription: The development environment identifier must only use word characters and dashes.
+
+Globals:
+  Function:
+    Runtime: java17
+    Architectures: [x86_64]
+    MemorySize: 800
+    Timeout: 4 #4 s

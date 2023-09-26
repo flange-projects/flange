@@ -17,7 +17,7 @@
 package dev.flange.build.cloud;
 
 import static com.globalmentor.io.ClassResources.*;
-import static java.lang.System.lineSeparator;
+import static java.lang.System.*;
 import static java.nio.charset.StandardCharsets.*;
 import static javax.tools.Diagnostic.Kind.*;
 import static javax.tools.StandardLocation.*;
@@ -49,6 +49,13 @@ public class FaasProcessor extends AbstractProcessor {
 	private static final String RESOURCE_ASSEMBLY_DESCRIPTOR_AWS_LAMBDA = "aws/assembly-descriptor-aws-lambda.xml";
 
 	/**
+	 * The resource containing the introduction of the SAM template for the project.
+	 * @see <a href="https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-specification-template-anatomy.html">AWS SAM template
+	 *      anatomy</a>.
+	 */
+	private static final String RESOURCE_SAM_INTRO = "aws/sam-intro.yaml";
+
+	/**
 	 * {@inheritDoc}
 	 * @implSpec This processor supports the latest supported source version.
 	 */
@@ -61,21 +68,28 @@ public class FaasProcessor extends AbstractProcessor {
 
 	private static final String LAMBDA_HANDLER_CLASS_NAME_SUFFIX = "_FlangeLambdaHandler";
 
+	private final Set<ClassName> processedFaasServiceLambdaHandlerClassNames = new HashSet<>();
+
 	@Override
 	public boolean process(final Set<? extends TypeElement> annotations, final RoundEnvironment roundEnvironment) {
-		for(TypeElement annotation : annotations) {
-			final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(annotation);
-			final Set<TypeElement> typeElements = ElementFilter.typesIn(annotatedElements);
-			//TODO raise error if there are non-type elements
-			for(final TypeElement typeElement : typeElements) {
-				try {
-					generateFaasServiceAwsLambdaStubClass(typeElement);
-					generateFaasServiceAwsLambdaAssemblyDescriptor(typeElement);
-				} catch(final IOException ioException) {
-					processingEnv.getMessager().printMessage(ERROR, ioException.getMessage()); //TODO improve
+		try {
+			for(TypeElement annotation : annotations) {
+				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(annotation);
+				final Set<TypeElement> typeElements = ElementFilter.typesIn(annotatedElements);
+				//TODO raise error if there are non-type elements
+				for(final TypeElement typeElement : typeElements) {
+					final ClassName handlerClassName = generateFaasServiceLambdadaStubClass(typeElement);
+					processedFaasServiceLambdaHandlerClassNames.add(handlerClassName);
+					generateFaasServiceLambdadaAssemblyDescriptor(typeElement);
 				}
 			}
+			if(roundEnvironment.processingOver()) {
+				generateFaasServiceSamTemplate(processedFaasServiceLambdaHandlerClassNames);
+			}
+		} catch(final IOException ioException) {
+			processingEnv.getMessager().printMessage(ERROR, ioException.getMessage()); //TODO improve
 		}
+
 		return true;
 	}
 
@@ -83,8 +97,9 @@ public class FaasProcessor extends AbstractProcessor {
 	 * Generates the AWS Lambda stub class for a FaaS service implementation.
 	 * @param faasServiceImplTypeElement The element representing the implementation of the FaaS service to be invoked by the stub.
 	 * @throws IOException if there is an I/O error writing the class.
+	 * @return The class name of the generated stub class.
 	 */
-	protected void generateFaasServiceAwsLambdaStubClass(@Nonnull final TypeElement faasServiceImplTypeElement) throws IOException {
+	protected ClassName generateFaasServiceLambdadaStubClass(@Nonnull final TypeElement faasServiceImplTypeElement) throws IOException {
 		final ClassName lambdaImplClassName = ClassName.get(faasServiceImplTypeElement);
 		final ClassName lambdaHandlerClassName = ClassName.get(lambdaImplClassName.packageName(),
 				lambdaImplClassName.simpleName() + LAMBDA_HANDLER_CLASS_NAME_SUFFIX);
@@ -104,6 +119,7 @@ public class FaasProcessor extends AbstractProcessor {
 
 						_Normally this file should not be edited manually._""").build();
 		lambdaHandlerClassJavaFile.writeTo(processingEnv.getFiler());
+		return lambdaHandlerClassName;
 	}
 
 	/**
@@ -111,12 +127,12 @@ public class FaasProcessor extends AbstractProcessor {
 	 * @param faasServiceImplTypeElement The element representing the implementation of the FaaS service for which an assembly will be created.
 	 * @throws IOException if there is an I/O error writing the assembly descriptor.
 	 */
-	protected void generateFaasServiceAwsLambdaAssemblyDescriptor(@Nonnull final TypeElement faasServiceImplTypeElement) throws IOException {
+	protected void generateFaasServiceLambdadaAssemblyDescriptor(@Nonnull final TypeElement faasServiceImplTypeElement) throws IOException {
 		final String lambdaHandlerClassSimpleName = faasServiceImplTypeElement.getSimpleName() + LAMBDA_HANDLER_CLASS_NAME_SUFFIX;
 		final String assemblyDescriptorFilename = "assembly-" + lambdaHandlerClassSimpleName + "-aws-lambda.xml"; //TODO use constant
 		try (
 				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_ASSEMBLY_DESCRIPTOR_AWS_LAMBDA)
-						.orElseThrow(() -> new ConfiguredStateException("Missing class resoource `%s`.".formatted(RESOURCE_ASSEMBLY_DESCRIPTOR_AWS_LAMBDA)));
+						.orElseThrow(() -> new ConfiguredStateException("Missing class resource `%s`.".formatted(RESOURCE_ASSEMBLY_DESCRIPTOR_AWS_LAMBDA)));
 				final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, UTF_8))) {
 			final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", assemblyDescriptorFilename, faasServiceImplTypeElement);
 			try (Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
@@ -124,6 +140,39 @@ public class FaasProcessor extends AbstractProcessor {
 				while((line = bufferedReader.readLine()) != null) {
 					writer.write(line);
 					writer.write(lineSeparator());
+				}
+			}
+		}
+	}
+
+	/**
+	 * Generates the SAM template for deploying a FaaS service implementation.
+	 * @param faasServiceLambdaHandlerClassNames The simple class names of the generated AWS Lambda handler stub classes.
+	 * @throws IOException if there is an I/O error writing the assembly descriptor.
+	 */
+	protected void generateFaasServiceSamTemplate(@Nonnull final Set<ClassName> faasServiceLambdaHandlerClassNames) throws IOException {
+		final String samFilename = "sam.yaml"; //TODO use constant
+		try (
+				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_SAM_INTRO)
+						.orElseThrow(() -> new ConfiguredStateException("Missing class resource `%s`.".formatted(RESOURCE_SAM_INTRO)));
+				final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, UTF_8))) {
+			final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", samFilename);
+			try (Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
+				String line; //write individual lines to produce line endings consistent with system; note that this will also ensure a trailing newline
+				while((line = bufferedReader.readLine()) != null) {
+					writer.write(line);
+					writer.write(lineSeparator());
+				}
+				writer.write("%n".formatted()); //TODO eventually parse and interpolate the original YAML file
+				writer.write("Resources:%n%n".formatted());
+				for(final ClassName faasServiceLambdaHandlerClassName : faasServiceLambdaHandlerClassNames) {
+					writer.write("  %s:%n".formatted(faasServiceLambdaHandlerClassName.simpleName().replace("_", ""))); //TODO refactor using logical ID sanitizing method
+					writer.write("    Type: AWS::Serverless::Function%n".formatted());
+					writer.write("    Properties:%n".formatted());
+					writer.write("      FunctionName: !Sub \"${AWS::StackName}-%s\"%n".formatted(faasServiceLambdaHandlerClassName.simpleName()));
+					writer.write("      CodeUri: !Sub \"s3://flange-${Env}-staging/%s-aws-lambda.zip\"%n".formatted(faasServiceLambdaHandlerClassName.simpleName())); //TODO switch to imported value reference when templating is available
+					writer.write("      Handler: %s::%s%n".formatted(faasServiceLambdaHandlerClassName.canonicalName(), "handleRequest")); //TODO use constant
+					//TODO add environment variable for active profiles
 				}
 			}
 		}
