@@ -1,10 +1,10 @@
 #!/bin/bash
-set -eu
+set -u
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-awsProfileFile=$SCRIPT_DIR/aws-profile #optional file; contains name of AWS profile to use
+awsProfileFile=aws-profile #optional file, relative to working directory; contains name of AWS profile to use
 
-if [[ $# -ne 1 ]]; then
+if (( $# != 1 )); then
   echo 'Tears down the infrastructure for an environment such as dev or prod.' >&2
   echo 'Usage: teardown-env <env>' >&2
   echo 'Example: teardown-env dev' >&2
@@ -15,6 +15,10 @@ fi
 
 env=$1
 
+echo "Tearing down environment $(tput bold)$env$(tput sgr0) ..."
+
 if [[ -f $awsProfileFile ]]; then awsProfileOption="--profile $(< $awsProfileFile)"; else awsProfileOption=""; fi
 stackName=flange-$env
-aws cloudformation delete-stack $awsProfileOption --stack-name $stackName
+aws cloudformation delete-stack \
+    $awsProfileOption
+    --stack-name $stackName

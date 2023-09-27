@@ -1,8 +1,8 @@
 #!/bin/bash
-set -eu
+set -u
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-awsProfileFile=$SCRIPT_DIR/aws-profile #optional file; contains name of AWS profile to use
+awsProfileFile=aws-profile #optional file, relative to working directory; contains name of AWS profile to use
 
 usage() {
   echo 'Sets up the infrastructure for an environment such as dev or prod.' >&2
@@ -19,41 +19,21 @@ usage() {
 args=()
 stage=""
 activeProfiles=""
-while [ $# -gt 0 ]; do
+while (( $# > 0 )); do
   case "$1" in
-    --active-profiles*)
-      actieveProfiles="$2"
-      shift
-      shift
-      ;;
-    --stage*)
-      stage="$2"
-      shift
-      shift
-      ;;
-    --help)
-      usage
-      exit 0
-      ;;
-    --)
-      shift
-      while [ $# -gt 0 ]; do args+=("$1"); shift; done;
-      break
-      ;;
+    --active-profiles) activeProfiles="$2"; shift; shift;;
+    --stage) stage="$2"; shift; shift;;
+    --help) usage; exit 0;;
+    --) shift; while (( $# > 0 )); do args+=("$1"); shift; done; break;;
     --*)
-      echo "**Bad parameter: $1**" >&2
-      usage
-      exit 1
-      ;;
-    *)
-      args+=("$1");
-      shift
-      ;;
+      echo "$(tput bold)Bad parameter: $1$(tput sgr0)" >&2
+      usage; exit 1;;
+    *) args+=("$1"); shift;;
   esac
 done
 
-if [[ ${#args[@]} -ne 2 ]]; then
-  echo "**Incorrect number of arguments: ${#args[@]}**" >&2
+if (( ${#args[@]} != 2 )); then
+  echo "$(tput bold)Incorrect number of arguments: ${#args[@]}$(tput sgr0)" >&2
   usage
   exit 1
 fi
@@ -77,7 +57,7 @@ if [[ -z $activeProfiles ]]; then
   esac
 fi
 
-echo "Creating environment $env ..."
+echo "Creating environment $(tput bold)$env$(tput sgr0) ..."
 echo 
 echo "Stage: $stage"
 echo "Active profiles: $activeProfiles"
@@ -85,4 +65,9 @@ echo "Active profiles: $activeProfiles"
 
 if [[ -f $awsProfileFile ]]; then awsProfileOption="--profile $(< $awsProfileFile)"; else awsProfileOption=""; fi
 stackName=flange-$env
-aws cloudformation deploy $awsProfileOption --stack-name $stackName --template-file $SCRIPT_DIR/env.cloudformation.yaml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides Env=$env Stage=$stage VpcCidrBlock16Prefix=$vpcCidrBlock16Prefix ActiveProfiles=$activeProfiles
+aws cloudformation deploy \
+    $awsProfileOption \
+    --stack-name $stackName \
+    --template-file $SCRIPT_DIR/env.cloudformation.yaml \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --parameter-overrides Env=$env Stage=$stage VpcCidrBlock16Prefix=$vpcCidrBlock16Prefix ActiveProfiles=$activeProfiles
