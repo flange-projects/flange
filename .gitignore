@@ -1,4 +1,4 @@
-setup/cloud/aws/aws-profile
+/aws-profile
 
 #Eclipse
 *.launch
@@ -8,7 +8,6 @@ setup/cloud/aws/aws-profile
 .factorypath
 .project
 .settings/
-bin/
 
 #JetBrains
 *.iml
