@@ -68,6 +68,7 @@ public class FaasProcessor extends AbstractProcessor {
 
 	private static final String LAMBDA_HANDLER_CLASS_NAME_SUFFIX = "_FlangeLambdaHandler";
 
+	private final Set<ClassName> processedFaasServiceLambdaImplClassNames = new HashSet<>();
 	private final Set<ClassName> processedFaasServiceLambdaHandlerClassNames = new HashSet<>();
 
 	@Override
@@ -78,12 +79,15 @@ public class FaasProcessor extends AbstractProcessor {
 				final Set<TypeElement> typeElements = ElementFilter.typesIn(annotatedElements);
 				//TODO raise error if there are non-type elements
 				for(final TypeElement typeElement : typeElements) {
-					final ClassName handlerClassName = generateFaasServiceLambdadaStubClass(typeElement);
-					processedFaasServiceLambdaHandlerClassNames.add(handlerClassName);
+					final ClassName lambdaImplClassName = ClassName.get(typeElement);
+					final ClassName lambdaHandlerClassName = generateFaasServiceLambdadaStubClass(typeElement);
+					processedFaasServiceLambdaImplClassNames.add(lambdaImplClassName);
+					processedFaasServiceLambdaHandlerClassNames.add(lambdaHandlerClassName);
 					generateFaasServiceLambdadaAssemblyDescriptor(typeElement);
 				}
 			}
 			if(roundEnvironment.processingOver()) {
+				generateFlangeDependenciesList(processedFaasServiceLambdaImplClassNames);
 				generateFaasServiceSamTemplate(processedFaasServiceLambdaHandlerClassNames);
 			}
 		} catch(final IOException ioException) {
@@ -135,7 +139,7 @@ public class FaasProcessor extends AbstractProcessor {
 						.orElseThrow(() -> new ConfiguredStateException("Missing class resource `%s`.".formatted(RESOURCE_ASSEMBLY_DESCRIPTOR_AWS_LAMBDA)));
 				final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, UTF_8))) {
 			final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", assemblyDescriptorFilename, faasServiceImplTypeElement);
-			try (Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
+			try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
 				String line; //write individual lines to produce line endings consistent with system; note that this will also normalize the file to end with a line ending
 				while((line = bufferedReader.readLine()) != null) {
 					writer.write(line);
@@ -146,9 +150,25 @@ public class FaasProcessor extends AbstractProcessor {
 	}
 
 	/**
+	 * Generates the Flange dependencies list indicating backing service implementations used by the AWS Lambda handlers.
+	 * @param faasServiceLambdaImplClassNames The class names of the backing FaaS service implementations.
+	 * @throws IOException if there is an I/O error writing the dependencies list.
+	 */
+	protected void generateFlangeDependenciesList(@Nonnull final Set<ClassName> faasServiceLambdaImplClassNames) throws IOException {
+		final String dependenciesListFilename = "flange-dependencies.lst"; //TODO reference constant from Flange
+		final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", dependenciesListFilename);
+		try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
+			for(final ClassName faasServiceLambdaHandlerClassName : faasServiceLambdaImplClassNames) {
+				writer.write(faasServiceLambdaHandlerClassName.canonicalName());
+				writer.write(lineSeparator());
+			}
+		}
+	}
+
+	/**
 	 * Generates the SAM template for deploying a FaaS service implementation.
-	 * @param faasServiceLambdaHandlerClassNames The simple class names of the generated AWS Lambda handler stub classes.
-	 * @throws IOException if there is an I/O error writing the assembly descriptor.
+	 * @param faasServiceLambdaHandlerClassNames The class names of the generated AWS Lambda handler stub classes.
+	 * @throws IOException if there is an I/O error writing the SAM template.
 	 */
 	protected void generateFaasServiceSamTemplate(@Nonnull final Set<ClassName> faasServiceLambdaHandlerClassNames) throws IOException {
 		final String samFilename = "sam.yaml"; //TODO use constant
@@ -157,7 +177,7 @@ public class FaasProcessor extends AbstractProcessor {
 						.orElseThrow(() -> new ConfiguredStateException("Missing class resource `%s`.".formatted(RESOURCE_SAM_INTRO)));
 				final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, UTF_8))) {
 			final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", samFilename);
-			try (Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
+			try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
 				String line; //write individual lines to produce line endings consistent with system; note that this will also ensure a trailing newline
 				while((line = bufferedReader.readLine()) != null) {
 					writer.write(line);
@@ -169,7 +189,7 @@ public class FaasProcessor extends AbstractProcessor {
 					writer.write("  %s:%n".formatted(faasServiceLambdaHandlerClassName.simpleName().replace("_", ""))); //TODO refactor using logical ID sanitizing method
 					writer.write("    Type: AWS::Serverless::Function%n".formatted());
 					writer.write("    Properties:%n".formatted());
-					writer.write("      FunctionName: !Sub \"${AWS::StackName}-%s\"%n".formatted(faasServiceLambdaHandlerClassName.simpleName()));
+					writer.write("      FunctionName: !Sub \"flange-${Env}-%s\"%n".formatted(faasServiceLambdaHandlerClassName.simpleName()));
 					writer.write("      CodeUri: !Sub \"s3://flange-${Env}-staging/%s-aws-lambda.zip\"%n".formatted(faasServiceLambdaHandlerClassName.simpleName())); //TODO switch to imported value reference when templating is available
 					writer.write("      Handler: %s::%s%n".formatted(faasServiceLambdaHandlerClassName.canonicalName(), "handleRequest")); //TODO use constant
 					//TODO add environment variable for active profiles
