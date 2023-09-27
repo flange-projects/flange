@@ -40,6 +40,20 @@
 				<artifactId>flange-example-cloud-faas-service-impl</artifactId>
 				<version>0.1.0-SNAPSHOT</version>
 			</dependency>
+
+			<dependency>
+				<groupId>com.amazonaws</groupId>
+				<artifactId>aws-lambda-java-log4j2</artifactId>
+				<version>1.5.1</version> <!-- TODO consolidate version definition -->
+			</dependency>
+
+			<dependency>
+				<groupId>org.apache.logging.log4j</groupId>
+				<artifactId>log4j-bom</artifactId>
+				<version>2.20.0</version> <!-- TODO consolidate version definition -->
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
