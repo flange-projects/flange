@@ -49,6 +49,13 @@ public class FaasProcessor extends AbstractProcessor {
 	private static final String RESOURCE_ASSEMBLY_DESCRIPTOR_AWS_LAMBDA = "aws/assembly-descriptor-aws-lambda.xml";
 
 	/**
+	 * The resource containing the Log4j config file.
+	 * @implNote The assembly descriptor for AWS Lambda will rename the file as needed for including in the AWS Lambda ZIP file.
+	 * @see <a href="https://logging.apache.org/log4j/2.x/manual/configuration.html">Log4j Configuration</a>.
+	 */
+	private static final String RESOURCE_LOG4J_CONFIG_AWS_LAMBDA = "aws/log4j2-aws-lambda.xml";
+
+	/**
 	 * The resource containing the introduction of the SAM template for the project.
 	 * @see <a href="https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-specification-template-anatomy.html">AWS SAM template
 	 *      anatomy</a>.
@@ -80,15 +87,16 @@ public class FaasProcessor extends AbstractProcessor {
 				//TODO raise error if there are non-type elements
 				for(final TypeElement typeElement : typeElements) {
 					final ClassName lambdaImplClassName = ClassName.get(typeElement);
-					final ClassName lambdaHandlerClassName = generateFaasServiceLambdadaStubClass(typeElement);
+					final ClassName lambdaHandlerClassName = generateFaasServiceLambdaStubClass(typeElement);
 					processedFaasServiceLambdaImplClassNames.add(lambdaImplClassName);
 					processedFaasServiceLambdaHandlerClassNames.add(lambdaHandlerClassName);
-					generateFaasServiceLambdadaAssemblyDescriptor(typeElement);
+					generateFaasServiceLambdaAssemblyDescriptor(typeElement);
 				}
 			}
 			if(roundEnvironment.processingOver()) {
 				generateFlangeDependenciesList(processedFaasServiceLambdaImplClassNames);
 				generateFaasServiceSamTemplate(processedFaasServiceLambdaHandlerClassNames);
+				generateFaasServiceLambdaLog4jConfigFile();
 			}
 		} catch(final IOException ioException) {
 			processingEnv.getMessager().printMessage(ERROR, ioException.getMessage()); //TODO improve
@@ -103,7 +111,7 @@ public class FaasProcessor extends AbstractProcessor {
 	 * @throws IOException if there is an I/O error writing the class.
 	 * @return The class name of the generated stub class.
 	 */
-	protected ClassName generateFaasServiceLambdadaStubClass(@Nonnull final TypeElement faasServiceImplTypeElement) throws IOException {
+	protected ClassName generateFaasServiceLambdaStubClass(@Nonnull final TypeElement faasServiceImplTypeElement) throws IOException {
 		final ClassName lambdaImplClassName = ClassName.get(faasServiceImplTypeElement);
 		final ClassName lambdaHandlerClassName = ClassName.get(lambdaImplClassName.packageName(),
 				lambdaImplClassName.simpleName() + LAMBDA_HANDLER_CLASS_NAME_SUFFIX);
@@ -131,7 +139,7 @@ public class FaasProcessor extends AbstractProcessor {
 	 * @param faasServiceImplTypeElement The element representing the implementation of the FaaS service for which an assembly will be created.
 	 * @throws IOException if there is an I/O error writing the assembly descriptor.
 	 */
-	protected void generateFaasServiceLambdadaAssemblyDescriptor(@Nonnull final TypeElement faasServiceImplTypeElement) throws IOException {
+	protected void generateFaasServiceLambdaAssemblyDescriptor(@Nonnull final TypeElement faasServiceImplTypeElement) throws IOException {
 		final String lambdaHandlerClassSimpleName = faasServiceImplTypeElement.getSimpleName() + LAMBDA_HANDLER_CLASS_NAME_SUFFIX;
 		final String assemblyDescriptorFilename = "assembly-" + lambdaHandlerClassSimpleName + "-aws-lambda.xml"; //TODO use constant
 		try (
@@ -161,6 +169,29 @@ public class FaasProcessor extends AbstractProcessor {
 			for(final ClassName faasServiceLambdaHandlerClassName : faasServiceLambdaImplClassNames) {
 				writer.write(faasServiceLambdaHandlerClassName.canonicalName());
 				writer.write(lineSeparator());
+			}
+		}
+	}
+
+	/**
+	 * Generates the Log4j configuration file for AWS Lambda.
+	 * @implSpec The file will be generated as <code>log4j2-aws-lambda.xml</code> in the root of the generated sources directory. Only one file will be needed for
+	 *           as many AWS Lambda instances are configured for the project.
+	 * @throws IOException if there is an I/O error writing the Log4j config file.
+	 */
+	protected void generateFaasServiceLambdaLog4jConfigFile() throws IOException {
+		final String log4jConfigFilename = "log4j2-aws-lambda.xml"; //TODO use constant, or use defined resource name
+		try (
+				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_LOG4J_CONFIG_AWS_LAMBDA)
+						.orElseThrow(() -> new ConfiguredStateException("Missing class resource `%s`.".formatted(RESOURCE_LOG4J_CONFIG_AWS_LAMBDA)));
+				final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, UTF_8))) {
+			final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", log4jConfigFilename);
+			try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
+				String line; //write individual lines to produce line endings consistent with system; note that this will also normalize the file to end with a line ending
+				while((line = bufferedReader.readLine()) != null) {
+					writer.write(line);
+					writer.write(lineSeparator());
+				}
 			}
 		}
 	}

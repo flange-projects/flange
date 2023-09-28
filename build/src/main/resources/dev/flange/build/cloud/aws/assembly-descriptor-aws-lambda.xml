@@ -31,5 +31,9 @@
 		<file>
 			<source>${project.build.directory}/generated-sources/annotations/flange-dependencies.lst</source>
 		</file>
+		<file>
+			<source>${project.build.directory}/generated-sources/annotations/log4j2-aws-lambda.xml</source>
+			<destName>log4j2.xml</destName>
+		</file>
 	</files>
 </assembly>
