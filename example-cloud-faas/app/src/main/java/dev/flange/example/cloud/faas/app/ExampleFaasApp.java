@@ -24,12 +24,14 @@ import java.util.concurrent.*;
 import javax.annotation.*;
 
 import dev.flange.Flange;
+import dev.flange.cloud.ServiceConsumer;
 import dev.flange.example.cloud.faas.service.api.MessageService;
 
 /**
  * Example application showing usage of a Flange Function-as-a-Service (FaaS).
  * @author Garret Wilson
  */
+@ServiceConsumer(MessageService.class)
 public class ExampleFaasApp implements Runnable {
 
 	private final MessageService messageService;

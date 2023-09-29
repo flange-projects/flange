@@ -19,18 +19,20 @@ package dev.flange.cloud;
 import java.lang.annotation.*;
 
 /**
- * Annotation indicating that Flange should deploy this service implementation as a cloud Function-as-a-Service (FaaS).
- * @apiNote Using best practices a service interface and implementation should be separated and placed in different projects; and this annotation should be
- *          applied to the service <em>implementation</em> class. The service interface represents how the service should be accessed via an API, not how the
- *          service is implemented or deployed; the interface should be annotated by the appropriate API annotation, such as {@link FaasApi}.
+ * Annotation indicating that the annotated implementation class is a consumer of some specified service.
+ * @implNote This annotation may eventually be superseded by some module-wide configuration, or the metadata of the itself.
  * @author Garret Wilson
  */
 @Target(ElementType.TYPE)
-@Retention(RetentionPolicy.CLASS)
+@Retention(RetentionPolicy.SOURCE)
 @Documented
-public @interface FaasService {
+public @interface ServiceConsumer {
 
-	/** @return A suggested name for the function, or an empty string if no name is suggested. */
-	String value() default "";
+	/**
+	 * Indicates the Flange cloud services this class consumes.
+	 * @apiNote Typically the interface(s) listed will here will also be present as construction dependency injection parameter(s).
+	 * @return The interface(s) representing the service(s) that will be consumed.
+	 */
+	Class<?>[] value();
 
 }

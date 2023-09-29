@@ -12,4 +12,11 @@
 
 	<name>Flange Example: Cloud FaaS &gt; Service API</name>
 	<description>Flange cloud FaaS example application service API.</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-cloud</artifactId>
+		</dependency>
+	</dependencies>
 </project>

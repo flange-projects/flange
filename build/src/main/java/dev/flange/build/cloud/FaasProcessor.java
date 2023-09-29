@@ -17,13 +17,20 @@
 package dev.flange.build.cloud;
 
 import static com.globalmentor.io.ClassResources.*;
+import static com.globalmentor.java.Conditions.*;
+import static com.globalmentor.java.Objects.*;
+import static com.globalmentor.util.stream.Streams.*;
 import static java.lang.System.*;
 import static java.nio.charset.StandardCharsets.*;
+import static java.util.Objects.*;
+import static java.util.stream.Collectors.*;
 import static javax.tools.Diagnostic.Kind.*;
 import static javax.tools.StandardLocation.*;
 
 import java.io.*;
+import java.lang.annotation.Annotation;
 import java.util.*;
+import java.util.stream.Stream;
 
 import javax.annotation.*;
 import javax.annotation.processing.*;
@@ -35,12 +42,17 @@ import javax.tools.FileObject;
 import com.globalmentor.model.ConfiguredStateException;
 import com.squareup.javapoet.*;
 
+import dev.flange.cloud.*;
+
 /**
  * Annotation processor for FaaS.
  * @author Garret Wilson
  */
-@SupportedAnnotationTypes("dev.flange.cloud.FaasService")
 public class FaasProcessor extends AbstractProcessor {
+
+	/** The fully qualified class names representing annotation type supported by this processor. */
+	public static final Set<String> SUPPORTED_ANNOTATION_TYPES = Stream.of(FaasService.class, ServiceConsumer.class).map(Class::getName)
+			.collect(toUnmodifiableSet());
 
 	/**
 	 * The resource containing the AWS Lambda assembly descriptor.
@@ -64,6 +76,15 @@ public class FaasProcessor extends AbstractProcessor {
 
 	/**
 	 * {@inheritDoc}
+	 * @implSpec This processor supports {@link #SUPPORTED_ANNOTATION_TYPES}.
+	 */
+	@Override
+	public Set<String> getSupportedAnnotationTypes() {
+		return SUPPORTED_ANNOTATION_TYPES;
+	}
+
+	/**
+	 * {@inheritDoc}
 	 * @implSpec This processor supports the latest supported source version.
 	 */
 	@Override
@@ -81,8 +102,9 @@ public class FaasProcessor extends AbstractProcessor {
 	@Override
 	public boolean process(final Set<? extends TypeElement> annotations, final RoundEnvironment roundEnvironment) {
 		try {
-			for(TypeElement annotation : annotations) {
-				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(annotation);
+			//@CloudFunctionService
+			{
+				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(FaasService.class);
 				final Set<TypeElement> typeElements = ElementFilter.typesIn(annotatedElements);
 				//TODO raise error if there are non-type elements
 				for(final TypeElement typeElement : typeElements) {
@@ -91,6 +113,28 @@ public class FaasProcessor extends AbstractProcessor {
 					processedFaasServiceLambdaImplClassNames.add(lambdaImplClassName);
 					processedFaasServiceLambdaHandlerClassNames.add(lambdaHandlerClassName);
 					generateFaasServiceLambdaAssemblyDescriptor(typeElement);
+				}
+			}
+			//@ServiceConsumer
+			{
+				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(ServiceConsumer.class);
+				final Set<TypeElement> typeElements = ElementFilter.typesIn(annotatedElements);
+				//TODO raise error if there are non-type elements
+				for(final TypeElement typeElement : typeElements) {
+					final AnnotationMirror serviceConsumerAnnotationMirror = typeAnnotationMirrors(typeElement, ServiceConsumer.class)
+							.collect(toOnly(() -> new IllegalStateException(
+									"Element `%s` unexpectedly contained multiple `@%s` annotations.".formatted(typeElement, ServiceConsumer.class.getSimpleName()))));
+					@SuppressWarnings("unchecked")
+					final List<? extends AnnotationValue> serviceClassAnnotationvalues = findValueElementValue(serviceConsumerAnnotationMirror)
+							.map(AnnotationValue::getValue).flatMap(asInstance(List.class)).orElseThrow(() -> new IllegalStateException(
+									"The `@%s` annotation of the element `%s` has no array value.".formatted(ServiceConsumer.class.getSimpleName(), typeElement)));
+					final Stream<String> serviceClassNames = serviceClassAnnotationvalues.stream().map(AnnotationValue::getValue).map(Object::toString); //TODO collect here if needed later
+					final Stream<TypeElement> serviceTypeElements = serviceClassNames
+							.map(className -> Optional.of(processingEnv.getElementUtils().getTypeElement(className))
+									.orElseThrow(() -> new IllegalStateException("Unable to find a single type element for service class `%s`.".formatted(className))));
+					processingEnv.getMessager().printMessage(NOTE,
+							"For class `%s` found service type elements %s.".formatted(typeElement, serviceTypeElements.collect(toUnmodifiableList()))); //TODO delete
+					//TODO check to see which annotations each service type has, and then store the corresponding class names in an appropriate set for adding to an unresolved dependency list (or generating a proxy) at the end of the rounds
 				}
 			}
 			if(roundEnvironment.processingOver()) {
@@ -103,6 +147,61 @@ public class FaasProcessor extends AbstractProcessor {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Retrieves all the annotation mirrors from a type element for annotations of a particular type
+	 * @param typeElement The type element representing the type potentially annotated with the specified annotation.
+	 * @param annotationClass The type of annotation to find.
+	 * @return The mirrors for the annotation(s) annotating the indicated type, if any.
+	 */
+	static Stream<? extends AnnotationMirror> typeAnnotationMirrors(@Nonnull final TypeElement typeElement,
+			@Nonnull final Class<? extends Annotation> annotationClass) {
+		final String canonicalName = annotationClass.getCanonicalName();
+		checkArgument(canonicalName != null, "Annotation class `%s` has no canonical name.", annotationClass.getName()); //check for completeness; not realistically possible: an annotation cannot be defined as an anonymous inner class
+		return typeElement.getAnnotationMirrors().stream().filter(annotationMirror -> {
+			final Element annotationElement = annotationMirror.getAnnotationType().asElement();
+			assert annotationElement instanceof TypeElement : "An annotation mirror type's element should always be a `TypeElement`.";
+			return ((TypeElement)annotationElement).getQualifiedName().contentEquals(canonicalName);
+		});
+	}
+
+	/**
+	 * Finds the annotation value mapped to the <code>value</code> element from an annotation mirror.
+	 * @apiNote The <code>value</code> element is the special element which allows the element value to be left out in the source file.
+	 * @implSpec This implementation delegates to {@link #findElementValueBySimpleName(AnnotationMirror, CharSequence)}.
+	 * @param annotationMirror The annotation mirror in which to look up an element value.
+	 * @return The annotation value if found.
+	 */
+	static Optional<? extends AnnotationValue> findValueElementValue(@Nonnull AnnotationMirror annotationMirror) {
+		return findElementValueBySimpleName(annotationMirror, "value"); //TODO use constant
+	}
+
+	/**
+	 * Finds the annotation value mapped to the executable element with the given simple name from an annotation mirror.
+	 * @implSpec This implementation calls {@link AnnotationMirror#getElementValues()} and then delegates to
+	 *           {@link #findElementValueBySimpleName(Map, CharSequence)}.
+	 * @param annotationMirror The annotation mirror in which to look up an element value.
+	 * @param simpleName The simple name (i.e. property name) of the value to retrieve.
+	 * @return The annotation value if found.
+	 */
+	static Optional<? extends AnnotationValue> findElementValueBySimpleName(@Nonnull AnnotationMirror annotationMirror, @Nonnull final CharSequence simpleName) {
+		return findElementValueBySimpleName(annotationMirror.getElementValues(), simpleName);
+	}
+
+	/**
+	 * Finds the annotation value mapped to the executable element with the given simple name.
+	 * @apiNote This is useful for finding a value of an {@link AnnotationMirror} from the map returned by {@link AnnotationMirror#getElementValues()}.
+	 * @param elementValues The map of element values associated with their executable elements (e.g. accessor methods of an annotation mirror).
+	 * @param simpleName The simple name (i.e. element name) of the value to retrieve.
+	 * @return The annotation value if found.
+	 * @see <a href="https://area-51.blog/2009/02/13/getting-class-values-from-annotations-in-an-annotationprocessor/">Getting Class values from Annotations in an
+	 *      AnnotationProcessor</a>
+	 */
+	static Optional<? extends AnnotationValue> findElementValueBySimpleName(
+			@Nonnull final Map<? extends ExecutableElement, ? extends AnnotationValue> elementValues, @Nonnull final CharSequence simpleName) {
+		requireNonNull(simpleName);
+		return elementValues.entrySet().stream().filter(entry -> entry.getKey().getSimpleName().contentEquals(simpleName)).findAny().map(Map.Entry::getValue);
 	}
 
 	/**
