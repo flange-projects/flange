@@ -320,7 +320,11 @@ public class FaasProcessor extends AbstractProcessor {
 					writer.write("    Type: AWS::Serverless::Function%n".formatted());
 					writer.write("    Properties:%n".formatted());
 					writer.write("      FunctionName: !Sub \"flange-${Env}-%s\"%n".formatted(faasServiceLambdaHandlerClassName.simpleName()));
-					writer.write("      CodeUri: !Sub \"s3://flange-${Env}-staging/%s-aws-lambda.zip\"%n".formatted(faasServiceLambdaHandlerClassName.simpleName())); //TODO switch to imported value reference when templating is available
+					writer.write("      CodeUri:%n".formatted());
+					writer.write("        Bucket:%n".formatted());
+					writer.write("          Fn::ImportValue:%n".formatted());
+					writer.write("            !Sub \"flange-${Env}:StagingBucketName\"%n".formatted());
+					writer.write("        Key: !Sub \"%s-aws-lambda.zip\"%n".formatted(faasServiceLambdaHandlerClassName.simpleName())); //TODO later interpolate version 
 					writer.write("      Handler: %s::%s%n".formatted(faasServiceLambdaHandlerClassName.canonicalName(), "handleRequest")); //TODO use constant
 					//TODO add environment variable for active profiles
 				}

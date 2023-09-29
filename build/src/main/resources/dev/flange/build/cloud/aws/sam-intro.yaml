@@ -6,6 +6,10 @@ Transform:
 Description:
   Flange service.
 
+# ## Imports
+#
+# * `flange-${Env}:StagingBucketName`
+
 Parameters:
   Env:
     Description: The token identifying the deployment environment, such as "dev", "dev3", or "dev-jdoe".
