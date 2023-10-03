@@ -32,7 +32,7 @@ import static org.zalando.fauxpas.FauxPas.*;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.*;
 import java.util.stream.Stream;
 
 import javax.annotation.*;
@@ -43,6 +43,8 @@ import javax.lang.model.type.*;
 import javax.lang.model.util.*;
 import javax.tools.FileObject;
 
+import com.fasterxml.classmate.GenericType;
+import com.globalmentor.collections.iterables.Iterables;
 import com.globalmentor.model.ConfiguredStateException;
 import com.squareup.javapoet.*;
 
@@ -184,6 +186,7 @@ public class FaasProcessor extends AbstractProcessor {
 		final TypeSpec.Builder lambdaStubClassSpecBuilder = TypeSpec.classBuilder(awsLambdaStubClassName).addOriginatingElement(serviceApiTypeElement) //
 				.addModifiers(Modifier.PUBLIC, Modifier.FINAL).superclass(ABSTRACT_FAAS_API_LAMBDA_STUB_CLASS_NAME).addSuperinterface(serviceApiClassName) //
 				.addJavadoc("AWS Lambda stub for {@link $T}.", serviceApiClassName);
+		final DeclaredType futureUnboundedWildcardType = findUnboundedWildcardType(processingEnv, Future.class).orElseThrow(IllegalStateException::new);
 		final DeclaredType completableFutureUnboundedWildcardType = findUnboundedWildcardType(processingEnv, CompletableFuture.class)
 				.orElseThrow(IllegalStateException::new);
 		methodsIn(serviceApiTypeElement.getEnclosedElements()).forEach(methodElement -> {
@@ -191,11 +194,18 @@ public class FaasProcessor extends AbstractProcessor {
 				return;
 			}
 			final TypeMirror returnTypeMirror = methodElement.getReturnType();
-			if(processingEnv.getTypeUtils().isAssignable(returnTypeMirror, completableFutureUnboundedWildcardType)) { //TODO add support for `Future<?>`
-				MethodSpec.Builder methodSpecBuilder = MethodSpec.overriding(methodElement);
-				methodSpecBuilder.addStatement("throw new $T()", UnsupportedOperationException.class); //TODO finish
+			if(returnTypeMirror instanceof final DeclaredType returnDeclaredType
+					&& (processingEnv.getTypeUtils().isAssignable(returnTypeMirror, futureUnboundedWildcardType) //Future<?>
+							|| processingEnv.getTypeUtils().isAssignable(returnTypeMirror, completableFutureUnboundedWildcardType) //CompletableFuture<?>
+			)) {
+				final TypeMirror typeArgument = Iterables.getOnly(returnDeclaredType.getTypeArguments(), IllegalStateException::new); //CompletableFuture<?> is expected to only have one type argument
+				final MethodSpec.Builder methodSpecBuilder = MethodSpec.overriding(methodElement); //TODO comment
+				methodSpecBuilder.addStatement("return invokeAsync(new $T<$L>(){})", GenericType.class, typeArgument); //TODO finish; add parameters
 				lambdaStubClassSpecBuilder.addMethod(methodSpecBuilder.build());
-			} //TODO else produce an error indicating that the return type is unsupported
+			} else {
+				processingEnv.getMessager().printMessage(ERROR,
+						"Currently only `Future<?>` or `CompletableFuture<?>` return types are supported for cloud function APIs; found `%s`.".formatted(returnTypeMirror));
+			}
 		});
 		final TypeSpec lambdaStubClassSpec = lambdaStubClassSpecBuilder.build();
 		final JavaFile lambdaHandlerClassJavaFile = JavaFile.builder(lambdaStubPackageName, lambdaStubClassSpec) //
