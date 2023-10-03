@@ -104,6 +104,9 @@ public class FaasProcessor extends AbstractProcessor {
 	private static final String LAMBDA_STUB_CLASS_NAME_SUFFIX = "_FlangeLambdaStub"; //TODO rename to include "Aws"
 	private static final String LAMBDA_HANDLER_CLASS_NAME_SUFFIX = "_FlangeLambdaHandler"; //TODO rename to include "Aws"
 
+	private static final String DEPENDENCIES_LIST_FILENAME = "flange-dependencies.lst"; //TODO reference constant from Flange
+	private static final String DEPENDENCIES_LIST_PLATFORM_AWS_FILENAME = "flange-dependencies_platform-aws.lst"; //TODO reference constant from Flange
+
 	private final Set<ClassName> cloudFunctionServiceImplClassNames = new HashSet<>();
 	private final Set<ClassName> awsFunctionServiceSkeletonClassNames = new HashSet<>();
 	private final Map<TypeElement, Set<TypeElement>> consumerTypeElementsByCloudFunctionApiTypeElement = new HashMap<>(); //TODO tidy
@@ -147,17 +150,20 @@ public class FaasProcessor extends AbstractProcessor {
 			}
 			if(roundEnvironment.processingOver()) {
 				if(!cloudFunctionServiceImplClassNames.isEmpty()) {
-					generateFlangeDependenciesList(cloudFunctionServiceImplClassNames);
+					generateFlangeDependenciesList(DEPENDENCIES_LIST_FILENAME, cloudFunctionServiceImplClassNames);
 				}
 				if(!awsFunctionServiceSkeletonClassNames.isEmpty()) {
 					generateFaasServiceSamTemplate(awsFunctionServiceSkeletonClassNames);
 					generateFaasServiceLambdaLog4jConfigFile();
 				}
 				//TODO consider generating the first implementation during rounds if no others have been generated (see https://stackoverflow.com/q/27886169 for warning), and maybe checking current dependency list, if any, to support incremental compilation
-				consumerTypeElementsByCloudFunctionApiTypeElement.forEach(throwingBiConsumer((serviceApiTypeElement, serviceConsumerTypeElements) -> {
-					generateAwsFunctionStubClass(serviceApiTypeElement, serviceConsumerTypeElements);
-
-				}));
+				if(!consumerTypeElementsByCloudFunctionApiTypeElement.isEmpty()) {
+					final Set<ClassName> awsFunctionStubClassNames = new HashSet<>();
+					consumerTypeElementsByCloudFunctionApiTypeElement.forEach(throwingBiConsumer((serviceApiTypeElement, serviceConsumerTypeElements) -> {
+						awsFunctionStubClassNames.add(generateAwsFunctionStubClass(serviceApiTypeElement, serviceConsumerTypeElements));
+					}));
+					generateFlangeDependenciesList(DEPENDENCIES_LIST_PLATFORM_AWS_FILENAME, awsFunctionStubClassNames);
+				}
 			}
 		} catch(final IOException ioException) {
 			processingEnv.getMessager().printMessage(ERROR, ioException.getMessage()); //TODO improve
@@ -275,15 +281,18 @@ public class FaasProcessor extends AbstractProcessor {
 	}
 
 	/**
-	 * Generates the Flange dependencies list indicating backing service implementations used by the AWS Lambda handlers.
-	 * @param faasServiceLambdaImplClassNames The class names of the backing FaaS service implementations.
+	 * Generates the Flange dependencies list indicating stub or backing service implementations used by the AWS Lambda handlers.
+	 * @apiNote Typically a dependencies list will be created for immediate dependencies such as backing service implementations, or platform-specific stub
+	 *          implementation stubs for remotely accessing services.
+	 * @param relativeResourcePath The filename or path of the dependencies list, relative to the source output.
+	 * @param dependencyClassNames The class names of the stubs or backing service implementations.
 	 * @throws IOException if there is an I/O error writing the dependencies list.
 	 */
-	protected void generateFlangeDependenciesList(@Nonnull final Set<ClassName> faasServiceLambdaImplClassNames) throws IOException {
-		final String dependenciesListFilename = "flange-dependencies.lst"; //TODO reference constant from Flange; change name to `…_cloud-aws` and rename when assembling (or merge in future version)
-		final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", dependenciesListFilename);
+	protected void generateFlangeDependenciesList(@Nonnull final CharSequence relativeResourcePath, @Nonnull final Set<ClassName> dependencyClassNames)
+			throws IOException {
+		final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", relativeResourcePath);
 		try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
-			for(final ClassName faasServiceLambdaHandlerClassName : faasServiceLambdaImplClassNames) {
+			for(final ClassName faasServiceLambdaHandlerClassName : dependencyClassNames) {
 				writer.write(faasServiceLambdaHandlerClassName.canonicalName());
 				writer.write(lineSeparator());
 			}

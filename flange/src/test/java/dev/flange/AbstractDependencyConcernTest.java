@@ -37,15 +37,16 @@ public class AbstractDependencyConcernTest {
 	private static final String RESOURCE_DEPENDENCIES_LIST_DUPLICATE = "flange-dependencies-duplicate.lst";
 
 	@Test
-	void testLoadDefinitionListResource() throws IOException {
-		assertThat("Empty dependency list.", AbstractDependencyConcern.loadDefinitionListResource(RESOURCE_DEPENDENCIES_LIST_EMPTY), isPresentAnd(is(empty())));
-		assertThat("Dependency list with one entry.", AbstractDependencyConcern.loadDefinitionListResource(RESOURCE_DEPENDENCIES_LIST_ONE),
+	void testLoadDependenciesListResource() throws IOException {
+		assertThat("Empty dependency list.", AbstractDependencyConcern.loadDependenciesListResource(RESOURCE_DEPENDENCIES_LIST_EMPTY), isPresentAnd(is(empty())));
+		assertThat("Dependency list with one entry.", AbstractDependencyConcern.loadDependenciesListResource(RESOURCE_DEPENDENCIES_LIST_ONE),
 				isPresentAnd(contains("java.lang.StringBuilder")));
-		assertThat("Dependency list with two entries.", AbstractDependencyConcern.loadDefinitionListResource(RESOURCE_DEPENDENCIES_LIST_TWO),
+		assertThat("Dependency list with two entries.", AbstractDependencyConcern.loadDependenciesListResource(RESOURCE_DEPENDENCIES_LIST_TWO),
 				isPresentAnd(contains("java.lang.StringBuffer", "java.lang.StringBuilder")));
-		assertThat("Dependency list with two entries in resources root.", AbstractDependencyConcern.loadDefinitionListResource(RESOURCE_DEPENDENCIES_LIST_TWO_ROOT),
+		assertThat("Dependency list with two entries in resources root.",
+				AbstractDependencyConcern.loadDependenciesListResource(RESOURCE_DEPENDENCIES_LIST_TWO_ROOT),
 				isPresentAnd(contains("java.lang.StringBuilder", "java.util.Random")));
-		Assertions.assertThrows(IOException.class, () -> AbstractDependencyConcern.loadDefinitionListResource(RESOURCE_DEPENDENCIES_LIST_DUPLICATE),
+		Assertions.assertThrows(IOException.class, () -> AbstractDependencyConcern.loadDependenciesListResource(RESOURCE_DEPENDENCIES_LIST_DUPLICATE),
 				"Dependency list with duplicate.");
 	}
 

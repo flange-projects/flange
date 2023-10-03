@@ -68,6 +68,11 @@ public class ExampleFaasApp implements Runnable {
 	 * @param args application arguments.
 	 */
 	public static void main(final String[] args) {
+		for(int i = 0; i < args.length - 1; i++) {
+			if(args[i].equals("--platform") && args[i + 1].equals("aws")) { //TODO use constants; improve with CLI library
+				System.setProperty("flange.platform", "aws"); //TODO use constants
+			}
+		}
 		final MessageService messageService = Flange.getDependencyConcern().getDependencyInstanceByType(MessageService.class);
 		final ExampleFaasApp app = new ExampleFaasApp(messageService);
 		app.run();
