@@ -26,7 +26,7 @@ import java.lang.annotation.*;
  * @author Garret Wilson
  */
 @Target(ElementType.TYPE)
-@Retention(RetentionPolicy.CLASS)
+@Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface FaasApi {
 

@@ -1,6 +1,6 @@
 /*
  * Copyright © 2023 GlobalMentor, Inc. <https://www.globalmentor.com/>
- *
+// *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -20,6 +20,7 @@ import static com.globalmentor.collections.iterables.Iterables.*;
 import static com.globalmentor.io.ClassResources.*;
 import static com.globalmentor.java.Conditions.*;
 import static com.globalmentor.java.Objects.*;
+import static com.globalmentor.util.stream.Streams.*;
 import static java.lang.System.*;
 import static java.nio.charset.StandardCharsets.*;
 import static java.util.Objects.*;
@@ -33,6 +34,7 @@ import java.io.*;
 import java.lang.annotation.Annotation;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import javax.annotation.*;
@@ -44,7 +46,6 @@ import javax.lang.model.util.*;
 import javax.tools.FileObject;
 
 import com.fasterxml.classmate.GenericType;
-import com.globalmentor.collections.iterables.Iterables;
 import com.globalmentor.model.ConfiguredStateException;
 import com.squareup.javapoet.*;
 
@@ -108,7 +109,7 @@ public class FaasProcessor extends AbstractProcessor {
 	private static final String DEPENDENCIES_LIST_PLATFORM_AWS_FILENAME = "flange-dependencies_platform-aws.lst"; //TODO reference constant from Flange
 
 	private final Set<ClassName> cloudFunctionServiceImplClassNames = new HashSet<>();
-	private final Set<ClassName> awsFunctionServiceSkeletonClassNames = new HashSet<>();
+	private final Map<ClassName, ClassName> awsFunctionServiceSkeletonsByServiceApiClassNames = new HashMap<>();
 	private final Map<TypeElement, Set<TypeElement>> consumerTypeElementsByCloudFunctionApiTypeElement = new HashMap<>(); //TODO tidy
 
 	@Override
@@ -116,34 +117,46 @@ public class FaasProcessor extends AbstractProcessor {
 		try {
 			//@CloudFunctionService
 			{
-				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(FaasService.class);
-				final Set<TypeElement> typeElements = typesIn(annotatedElements);
+				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(FaasService.class); //TODO create utility to get types and ensure there are no non-types
+				final Set<TypeElement> serviceTypeElements = typesIn(annotatedElements);
 				//TODO raise error if there are non-type elements
-				for(final TypeElement typeElement : typeElements) {
-					final ClassName serviceImplClassName = ClassName.get(typeElement);
-					final ClassName awsLambdaServiceHandlerClassName = generateAwsFunctionServiceSkeletonClass(typeElement);
+				for(final TypeElement serviceTypeElement : serviceTypeElements) {
+
+					final Optional<DeclaredType> foundFaasApiAnnotatedInterfaceType = interfacesAnnotatedWith(processingEnv.getElementUtils(),
+							processingEnv.getTypeUtils(), serviceTypeElement, FaasApi.class).reduce(toFindOnly()); //TODO use improved reduction from JAVA-344 to provide an error if there are multiple interfaces found
+					if(!foundFaasApiAnnotatedInterfaceType.isPresent()) {
+						processingEnv.getMessager().printMessage(WARNING,
+								"Service `%s` implements no interfaces annotated with `@%s`; generated cloud function may not be accessible from other system components."
+										.formatted(serviceTypeElement, FaasApi.class.getSimpleName()));
+					}
+					final ClassName serviceImplClassName = ClassName.get(serviceTypeElement);
 					cloudFunctionServiceImplClassNames.add(serviceImplClassName);
-					awsFunctionServiceSkeletonClassNames.add(awsLambdaServiceHandlerClassName);
-					generateFaasServiceLambdaAssemblyDescriptor(typeElement);
+					final ClassName serviceApiClassName = foundFaasApiAnnotatedInterfaceType.map(DeclaredType::asElement).flatMap(asInstance(TypeElement.class))
+							.map(ClassName::get).orElse(serviceImplClassName); //if we can't find an API interface, use the service class name itself, although other components can't find it
+					final ClassName awsLambdaServiceHandlerClassName = generateAwsFunctionServiceSkeletonClass(serviceTypeElement);
+					awsFunctionServiceSkeletonsByServiceApiClassNames.put(serviceApiClassName, awsLambdaServiceHandlerClassName);
+					generateFaasServiceLambdaAssemblyDescriptor(serviceTypeElement);
 				}
 			}
 			//@ServiceClient
 			{
 				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(ServiceConsumer.class);
-				final Set<TypeElement> typeElements = typesIn(annotatedElements);
+				final Set<TypeElement> serviceTypeClientElements = typesIn(annotatedElements);
 				//TODO raise error if there are non-type elements
-				for(final TypeElement typeElement : typeElements) {
-					final AnnotationMirror serviceConsumerAnnotationMirror = findAnnotationMirror(typeElement, ServiceConsumer.class).orElseThrow(AssertionError::new); //we already know it has the annotation
+				for(final TypeElement serviceClientTypeElement : serviceTypeClientElements) {
+					final AnnotationMirror serviceConsumerAnnotationMirror = findAnnotationMirror(serviceClientTypeElement, ServiceConsumer.class)
+							.orElseThrow(AssertionError::new); //we already know it has the annotation
 					@SuppressWarnings("unchecked")
 					final List<? extends AnnotationValue> serviceClassAnnotationValues = findValueElementValue(serviceConsumerAnnotationMirror)
 							.map(AnnotationValue::getValue).flatMap(asInstance(List.class)).orElseThrow(() -> new IllegalStateException(
-									"The `@%s` annotation of the element `%s` has no array value.".formatted(ServiceConsumer.class.getSimpleName(), typeElement)));
+									"The `@%s` annotation of the element `%s` has no array value.".formatted(ServiceConsumer.class.getSimpleName(), serviceClientTypeElement)));
 					serviceClassAnnotationValues.stream().map(AnnotationValue::getValue).map(Object::toString) //consumed service class names
 							.map(className -> findTypeElement(processingEnv.getElementUtils(), className) //consumed service type elements
 									.orElseThrow(() -> new IllegalStateException("Unable to find a single type element for service class `%s`.".formatted(className))))
 							.forEach(serviceTypeElement -> {
 								if(findAnnotationMirror(serviceTypeElement, FaasApi.class).isPresent()) {
-									consumerTypeElementsByCloudFunctionApiTypeElement.computeIfAbsent(serviceTypeElement, __ -> new LinkedHashSet<>()).add(typeElement);
+									consumerTypeElementsByCloudFunctionApiTypeElement.computeIfAbsent(serviceTypeElement, __ -> new LinkedHashSet<>())
+											.add(serviceClientTypeElement);
 								}
 							});
 				}
@@ -152,8 +165,8 @@ public class FaasProcessor extends AbstractProcessor {
 				if(!cloudFunctionServiceImplClassNames.isEmpty()) {
 					generateFlangeDependenciesList(DEPENDENCIES_LIST_FILENAME, cloudFunctionServiceImplClassNames);
 				}
-				if(!awsFunctionServiceSkeletonClassNames.isEmpty()) {
-					generateFaasServiceSamTemplate(awsFunctionServiceSkeletonClassNames);
+				if(!awsFunctionServiceSkeletonsByServiceApiClassNames.isEmpty()) {
+					generateFaasServiceSamTemplate(awsFunctionServiceSkeletonsByServiceApiClassNames);
 					generateFaasServiceLambdaLog4jConfigFile();
 				}
 				//TODO consider generating the first implementation during rounds if no others have been generated (see https://stackoverflow.com/q/27886169 for warning), and maybe checking current dependency list, if any, to support incremental compilation
@@ -192,21 +205,22 @@ public class FaasProcessor extends AbstractProcessor {
 		final TypeSpec.Builder lambdaStubClassSpecBuilder = TypeSpec.classBuilder(awsLambdaStubClassName).addOriginatingElement(serviceApiTypeElement) //
 				.addModifiers(Modifier.PUBLIC, Modifier.FINAL).superclass(ABSTRACT_FAAS_API_LAMBDA_STUB_CLASS_NAME).addSuperinterface(serviceApiClassName) //
 				.addJavadoc("AWS Lambda stub for {@link $T}.", serviceApiClassName);
-		final DeclaredType futureUnboundedWildcardType = findUnboundedWildcardType(processingEnv, Future.class).orElseThrow(IllegalStateException::new);
-		final DeclaredType completableFutureUnboundedWildcardType = findUnboundedWildcardType(processingEnv, CompletableFuture.class)
+		final DeclaredType futureUnboundedWildcardType = findUnboundedWildcardDeclaredType(processingEnv, Future.class).orElseThrow(IllegalStateException::new);
+		final DeclaredType completableFutureUnboundedWildcardType = findUnboundedWildcardDeclaredType(processingEnv, CompletableFuture.class)
 				.orElseThrow(IllegalStateException::new);
 		methodsIn(serviceApiTypeElement.getEnclosedElements()).forEach(methodElement -> {
 			if(methodElement.isDefault()) { //don't override default method implementations
 				return;
 			}
+			final String methodName = methodElement.getSimpleName().toString();
 			final TypeMirror returnTypeMirror = methodElement.getReturnType();
 			if(returnTypeMirror instanceof final DeclaredType returnDeclaredType
 					&& (processingEnv.getTypeUtils().isAssignable(returnTypeMirror, futureUnboundedWildcardType) //Future<?>
 							|| processingEnv.getTypeUtils().isAssignable(returnTypeMirror, completableFutureUnboundedWildcardType) //CompletableFuture<?>
 			)) {
-				final TypeMirror typeArgument = Iterables.getOnly(returnDeclaredType.getTypeArguments(), IllegalStateException::new); //CompletableFuture<?> is expected to only have one type argument
+				final TypeMirror typeArgument = getOnly(returnDeclaredType.getTypeArguments(), IllegalStateException::new); //CompletableFuture<?> is expected to only have one type argument
 				final MethodSpec.Builder methodSpecBuilder = MethodSpec.overriding(methodElement); //TODO comment
-				methodSpecBuilder.addStatement("return invokeAsync(new $T<$L>(){})", GenericType.class, typeArgument); //TODO finish; add parameters
+				methodSpecBuilder.addStatement("return invokeAsync(new $T<$L>(){}, $S)", GenericType.class, typeArgument, methodName); //TODO finish; add parameters
 				lambdaStubClassSpecBuilder.addMethod(methodSpecBuilder.build());
 			} else {
 				processingEnv.getMessager().printMessage(ERROR,
@@ -324,10 +338,11 @@ public class FaasProcessor extends AbstractProcessor {
 
 	/**
 	 * Generates the SAM template for deploying a FaaS service implementation.
-	 * @param faasServiceLambdaHandlerClassNames The class names of the generated AWS Lambda handler skeleton classes.
+	 * @param awsFunctionServiceSkeletonsByServiceApiClassNames The class names of the generated AWS Lambda handler skeleton classes; each associated with the
+	 *          class name of the service API class, which is typically an interface.
 	 * @throws IOException if there is an I/O error writing the SAM template.
 	 */
-	protected void generateFaasServiceSamTemplate(@Nonnull final Set<ClassName> faasServiceLambdaHandlerClassNames) throws IOException {
+	protected void generateFaasServiceSamTemplate(@Nonnull final Map<ClassName, ClassName> awsFunctionServiceSkeletonsByServiceApiClassNames) throws IOException {
 		final String samFilename = "sam.yaml"; //TODO use constant
 		try (
 				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_SAM_INTRO)
@@ -342,19 +357,19 @@ public class FaasProcessor extends AbstractProcessor {
 				}
 				writer.write("%n".formatted()); //TODO eventually parse and interpolate the original YAML file
 				writer.write("Resources:%n%n".formatted());
-				for(final ClassName faasServiceLambdaHandlerClassName : faasServiceLambdaHandlerClassNames) {
-					writer.write("  %s:%n".formatted(faasServiceLambdaHandlerClassName.simpleName().replace("_", ""))); //TODO refactor using logical ID sanitizing method
+				awsFunctionServiceSkeletonsByServiceApiClassNames.forEach(throwingBiConsumer((serviceApiClassName, serviceSkeletonClassName) -> {
+					writer.write("  %s:%n".formatted(serviceApiClassName.simpleName().replace("_", ""))); //TODO refactor using logical ID sanitizing method
 					writer.write("    Type: AWS::Serverless::Function%n".formatted());
 					writer.write("    Properties:%n".formatted());
-					writer.write("      FunctionName: !Sub \"flange-${Env}-%s\"%n".formatted(faasServiceLambdaHandlerClassName.simpleName()));
+					writer.write("      FunctionName: !Sub \"flange-${Env}-%s\"%n".formatted(serviceApiClassName.simpleName())); //TODO consider appending short hash of fully-qualified package+class to prevent clashes 
 					writer.write("      CodeUri:%n".formatted());
 					writer.write("        Bucket:%n".formatted());
 					writer.write("          Fn::ImportValue:%n".formatted());
 					writer.write("            !Sub \"flange-${Env}:StagingBucketName\"%n".formatted());
-					writer.write("        Key: !Sub \"%s-aws-lambda.zip\"%n".formatted(faasServiceLambdaHandlerClassName.simpleName())); //TODO later interpolate version 
-					writer.write("      Handler: %s::%s%n".formatted(faasServiceLambdaHandlerClassName.canonicalName(), "handleRequest")); //TODO use constant
+					writer.write("        Key: !Sub \"%s-aws-lambda.zip\"%n".formatted(serviceSkeletonClassName.simpleName())); //TODO later interpolate version 
+					writer.write("      Handler: %s::%s%n".formatted(serviceSkeletonClassName.canonicalName(), "handleRequest")); //TODO use constant
 					//TODO add environment variable for active profiles
-				}
+				}));
 			}
 		}
 	}
@@ -362,7 +377,7 @@ public class FaasProcessor extends AbstractProcessor {
 	//## Elements
 
 	/**
-	 * Retrieves a single all the annotation mirrors from a type element for annotations of a particular type.
+	 * Retrieves an annotation mirror from a type element for annotations of a particular type.
 	 * @implSpec This implementation does not check for repeated annotations.
 	 * @param typeElement The type element representing the type potentially annotated with the specified annotation.
 	 * @param annotationClass The type of annotation to find.
@@ -388,6 +403,20 @@ public class FaasProcessor extends AbstractProcessor {
 			assert annotationElement instanceof TypeElement : "An annotation mirror type's element should always be a `TypeElement`.";
 			return ((TypeElement)annotationElement).getQualifiedName().contentEquals(canonicalName);
 		});
+	}
+
+	//TODO document, comparing with `annotationMirrors(…)`
+	static Stream<? extends TypeMirror> interfacesAssignableTo(@Nonnull final Elements elements, @Nonnull final Types types, //TODO perhaps delete; `interfacesAnnotatedWith` was probably desired
+			@Nonnull final TypeElement typeElement, @Nonnull final Class<?> interfaceClass) {
+		checkArgument(interfaceClass.isInterface(), "Class `%s` does not represent an interface.", interfaceClass.getName());
+		return typeElement.getInterfaces().stream().filter(isAssignableTo(elements, types, interfaceClass));
+	}
+
+	//TODO document
+	static Stream<DeclaredType> interfacesAnnotatedWith(@Nonnull final Elements elements, @Nonnull final Types types, @Nonnull final TypeElement typeElement,
+			@Nonnull final Class<? extends Annotation> annotationClass) {
+		return typeElement.getInterfaces().stream().flatMap(asInstances(DeclaredType.class))
+				.filter(interfaceType -> findAnnotationMirror((TypeElement)interfaceType.asElement(), annotationClass).isPresent());
 	}
 
 	//## Mirrors
@@ -436,6 +465,34 @@ public class FaasProcessor extends AbstractProcessor {
 
 	//### Elements Utilities
 
+	//TODO probably move a lot of the methods requiring `Elements` and `Types` up to the `Elements` section, as many of them are so fundamental (and the utilities are part of `javax.lang.model.util`), even though they assume some processing environment to get a utilities instance 
+
+	/**
+	 * Tests whether a type is assignable to the type corresponding to the given class (i.e. whether instances of each would have an <code>instanceof</code>
+	 * relationship).
+	 * @implSpec This implementation calls {@link #findDeclaredType(Elements, Types, Class, TypeMirror...)}.
+	 * @param elements The element utilities.
+	 * @param types The type utilities.
+	 * @param typeMirror The type to test.
+	 * @param clazz The class representing the type against which to compare for assignability.
+	 * @return <code>true</code> if the type is assignable to the type represented by the class.
+	 * @throws IllegalArgumentException if no type could be found for the given class; or given a type for an executable, package, or module is invalid.
+	 * @see Types#isAssignable(TypeMirror, TypeMirror)
+	 */
+	static boolean isAssignableTo(@Nonnull final Elements elements, @Nonnull final Types types, TypeMirror typeMirror, @Nonnull final Class<?> clazz) {
+		/*TODO delete probably
+				return types.isAssignable(typeMirror, findDeclaredType(elements, types, clazz)
+						.orElseThrow(() -> new IllegalArgumentException("No declared type found for class `%s`.`".formatted(clazz.getName()))));
+		*/
+		return isAssignableTo(elements, types, clazz).test(typeMirror);
+	}
+
+	static Predicate<TypeMirror> isAssignableTo(@Nonnull final Elements elements, @Nonnull final Types types, @Nonnull final Class<?> clazz) { //TODO document
+		final TypeMirror classType = findDeclaredType(elements, types, clazz)
+				.orElseThrow(() -> new IllegalArgumentException("No declared type found for class `%s`.`".formatted(clazz.getName())));
+		return type -> types.isAssignable(type, classType);
+	}
+
 	/**
 	 * Finds a returns a type element from a class if the type element is uniquely determinable in the environment.
 	 * @implSpec This implementation delegates to {@link #findTypeElement(Elements, CharSequence)}.
@@ -476,14 +533,14 @@ public class FaasProcessor extends AbstractProcessor {
 	 * @see Elements#getTypeElement(CharSequence)
 	 * @see Types#getDeclaredType(TypeElement, TypeMirror...)
 	 */
-	static Optional<DeclaredType> findTypeElement(@Nonnull final Elements elements, @Nonnull final Types types, @Nonnull final Class<?> clazz,
+	static Optional<DeclaredType> findDeclaredType(@Nonnull final Elements elements, @Nonnull final Types types, @Nonnull final Class<?> clazz,
 			@Nonnull final TypeMirror... typeArgs) {
 		return findTypeElement(elements, clazz).map(typeElement -> types.getDeclaredType(typeElement, typeArgs));
 	}
 
 	/**
 	 * Finds a returns a type corresponding to a class type element and actual type arguments, if the type element is uniquely determinable in the environment.
-	 * @implSpec This implementation delegates to {@link #findTypeElement(Elements, Types, Class, TypeMirror...)}.
+	 * @implSpec This implementation delegates to {@link #findDeclaredType(Elements, Types, Class, TypeMirror...)}.
 	 * @param processingEnvironment The processing environment.
 	 * @param clazz The class for which a type element is to be found.
 	 * @param typeArgs The actual type arguments.
@@ -495,15 +552,15 @@ public class FaasProcessor extends AbstractProcessor {
 	 * @see ProcessingEnvironment#getElementUtils()
 	 * @see ProcessingEnvironment#getTypeUtils()
 	 */
-	static Optional<DeclaredType> findTypeElement(@Nonnull ProcessingEnvironment processingEnvironment, @Nonnull final Class<?> clazz,
+	static Optional<DeclaredType> findDeclaredType(@Nonnull ProcessingEnvironment processingEnvironment, @Nonnull final Class<?> clazz,
 			@Nonnull final TypeMirror... typeArgs) {
-		return findTypeElement(processingEnvironment.getElementUtils(), processingEnvironment.getTypeUtils(), clazz, typeArgs);
+		return findDeclaredType(processingEnvironment.getElementUtils(), processingEnvironment.getTypeUtils(), clazz, typeArgs);
 	}
 
 	/**
 	 * Finds a returns a type corresponding to a class type element with an unbounded wildcard type parameter, if the type element is uniquely determinable in the
 	 * environment.
-	 * @implSpec This implementation delegates to {@link #findTypeElement(Elements, Types, Class, TypeMirror...)} using the result of
+	 * @implSpec This implementation delegates to {@link #findDeclaredType(Elements, Types, Class, TypeMirror...)} using the result of
 	 *           #getUnboundedWildcardType(Types).
 	 * @param elements The element utilities.
 	 * @param types The type utilities.
@@ -515,14 +572,14 @@ public class FaasProcessor extends AbstractProcessor {
 	 * @see Types#getDeclaredType(TypeElement, TypeMirror...)
 	 * @see #getUnboundedWildcardType(Types)
 	 */
-	static Optional<DeclaredType> findUnboundedWildcardType(@Nonnull final Elements elements, @Nonnull final Types types, @Nonnull final Class<?> clazz) {
-		return findTypeElement(elements, types, clazz, getUnboundedWildcardType(types));
+	static Optional<DeclaredType> findUnboundedWildcardDeclaredType(@Nonnull final Elements elements, @Nonnull final Types types, @Nonnull final Class<?> clazz) {
+		return findDeclaredType(elements, types, clazz, getUnboundedWildcardType(types));
 	}
 
 	/**
 	 * Finds a returns a type corresponding to a class type element with an unbounded wildcard type parameter, if the type element is uniquely determinable in the
 	 * environment.
-	 * @implSpec This implementation delegates to {@link #findUnboundedWildcardType(Elements, Types, Class)}.
+	 * @implSpec This implementation delegates to {@link #findUnboundedWildcardDeclaredType(Elements, Types, Class)}.
 	 * @param processingEnvironment The processing environment.
 	 * @param clazz The class for which a type element is to be found.
 	 * @return The type element for the class, which will not be present if no type element can be uniquely determined.
@@ -533,8 +590,8 @@ public class FaasProcessor extends AbstractProcessor {
 	 * @see ProcessingEnvironment#getElementUtils()
 	 * @see ProcessingEnvironment#getTypeUtils()
 	 */
-	static Optional<DeclaredType> findUnboundedWildcardType(@Nonnull ProcessingEnvironment processingEnvironment, @Nonnull final Class<?> clazz) {
-		return findUnboundedWildcardType(processingEnvironment.getElementUtils(), processingEnvironment.getTypeUtils(), clazz);
+	static Optional<DeclaredType> findUnboundedWildcardDeclaredType(@Nonnull ProcessingEnvironment processingEnvironment, @Nonnull final Class<?> clazz) {
+		return findUnboundedWildcardDeclaredType(processingEnvironment.getElementUtils(), processingEnvironment.getTypeUtils(), clazz);
 	}
 
 	//### Types Utilities

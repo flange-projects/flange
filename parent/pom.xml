@@ -54,14 +54,16 @@
 
 			<dependency>
 				<groupId>io.clogr</groupId>
-				<artifactId>clogr</artifactId>
+				<artifactId>clogr-bom</artifactId>
 				<version>0.8.4</version>
 			</dependency>
 
 			<dependency>
 				<groupId>io.confound</groupId>
-				<artifactId>config-properties</artifactId>
+				<artifactId>confound-bom</artifactId>
 				<version>0.7.4</version>
+				<type>pom</type>
+				<scope>import</scope>
 			</dependency>
 
 			<dependency>

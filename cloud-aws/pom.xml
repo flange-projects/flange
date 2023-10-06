@@ -46,13 +46,28 @@
 		</dependency>
 
 		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-cloud</artifactId>
+		</dependency>
+
+		<dependency>
 			<groupId>io.clogr</groupId>
 			<artifactId>clogr</artifactId>
 		</dependency>
 
 		<dependency>
+			<groupId>io.confound</groupId>
+			<artifactId>confound</artifactId>
+		</dependency>
+
+		<dependency>
 			<groupId>software.amazon.awssdk</groupId>
 			<artifactId>lambda</artifactId>
+		</dependency>
+		
+		<dependency> <!-- required e.g. for profile to assume a role via the SDK -->
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>sts</artifactId>
 		</dependency>
 	</dependencies>
 

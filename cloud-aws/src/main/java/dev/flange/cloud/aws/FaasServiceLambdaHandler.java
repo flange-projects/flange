@@ -16,11 +16,21 @@
 
 package dev.flange.cloud.aws;
 
+import static com.globalmentor.java.Conditions.*;
+import static com.globalmentor.java.Objects.*;
+import static dev.flange.cloud.aws.Marshalling.*;
+import static java.util.Objects.*;
+
 import java.io.*;
+import java.lang.reflect.*;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.stream.Stream;
 
 import javax.annotation.*;
 
 import com.amazonaws.services.lambda.runtime.*;
+import com.globalmentor.util.stream.Streams;
 
 import dev.flange.*;
 import io.clogr.Clogged;
@@ -39,6 +49,8 @@ public class FaasServiceLambdaHandler<S> implements RequestStreamHandler, Flange
 		return service;
 	}
 
+	//TODO consider passing both the interface and the implementation
+
 	/**
 	 * FaaS service class constructor.
 	 * @implSpec The service dependency will be looked up and instantiated using Flange.
@@ -53,6 +65,75 @@ public class FaasServiceLambdaHandler<S> implements RequestStreamHandler, Flange
 	@Override
 	public void handleRequest(final InputStream inputStream, final OutputStream outputStream, final Context context) throws IOException {
 		getLogger().info("Handling request for backing service of type `{}`.", getService().getClass().getName()); //TODO delete; testing
+
+		@SuppressWarnings("unchecked")
+		final Map<String, Object> inputs = JSON_READER.readValue(new BufferedInputStream(inputStream), Map.class);
+		final String methodName = Optional.ofNullable(inputs.get(PARAM_FLANGE_METHOD_NAME)).flatMap(asInstance(String.class))
+				.orElseThrow(() -> new IllegalArgumentException("Missing input `%s` method name string.".formatted(PARAM_FLANGE_METHOD_NAME)));
+		final Class<?> serviceClass = getService().getClass();
+		final Method method;
+		try {
+			method = declaredMethodsHavingName(serviceClass, methodName).collect(Streams.toOnly());
+		} catch(final NoSuchElementException noSuchElementException) {
+			throw new IllegalArgumentException("No service `%s` method named `%s` found.".formatted(serviceClass.getName(), methodName));
+		} catch(final IllegalArgumentException illegalArgumentException) {
+			throw new IllegalArgumentException(
+					"Service `%s` has multiple methods named `%s`; currently only one is supported.".formatted(serviceClass.getName(), methodName));
+		}
+		//TODO delete getLogger().atInfo().log("Handling request for method name `{}`.", methodName); //TODO delete
+		final Class<?> methodReturnType = method.getReturnType();
+		checkArgument(methodReturnType.equals(Future.class) || methodReturnType.equals(CompletableFuture.class),
+				"Class `%s` method `%s` expected to have a `Future<?>` or `CompletableFuture<?>` return type; found `%s`.", serviceClass.getName(), methodName,
+				methodReturnType.getName());
+		final List<?> methodArgs = List.of(); //TODO parse method arguments
+		final Object output;
+		try {
+			final Future<?> result;
+			try {
+				result = (Future<?>)method.invoke(getService(), methodArgs.toArray(Object[]::new));
+			} catch(final InvocationTargetException invocationTargetException) {
+				final Throwable cause = invocationTargetException.getCause();
+				//TODO use Java 21 pattern matching
+				if(cause instanceof IOException ioException) { //decide if we want to throw or wrap IOException; should it be distinguished from an Lambda IOException?
+					throw ioException;
+				} else if(cause instanceof RuntimeException runtimeException) {
+					throw runtimeException;
+				}
+				throw new IllegalStateException("Unrecognized exception type `%s`.".formatted(cause.getClass().getName())); //TODO improve
+			} catch(final IllegalAccessException illegalAccessException) {
+				throw new IllegalStateException("Unable to access class `%s` method `%s`.".formatted(serviceClass.getName(), methodName)); //TODO improve
+			} catch(final IllegalArgumentException illegalArgumentException) {
+				throw illegalArgumentException; //TODO determine best approach
+			}
+			output = result.get(); //TODO use timeout with `get(long timeout, TimeUnit unit)` 
+		} catch(final CancellationException cancellationException) {
+			throw new RuntimeException("Service operation cancelled while invoking class `%s` method `%s`.".formatted(serviceClass.getName(), methodName)); //TODO consider retrying on the client side
+		} catch(final InterruptedException interruptedException) {
+			throw new RuntimeException("Interrupted while invoking class `%s` method `%s`.".formatted(serviceClass.getName(), methodName)); //TODO consider retrying on the client side
+		} catch(final ExecutionException executionException) {
+			//TODO check for timeout exception and retry, etc.; actually, don't retry here—retry on the client side
+			final Throwable cause = executionException.getCause();
+			//TODO use Java 21 pattern matching
+			if(cause instanceof IOException ioException) { //decide if we want to throw or wrap IOException; should it be distinguished from an Lambda IOException?
+				throw ioException;
+			} else if(cause instanceof RuntimeException runtimeException) {
+				throw runtimeException;
+			}
+			throw new IllegalStateException("Unrecognized exception type `%s`.".formatted(cause.getClass().getName())); //TODO improve
+		}
+		//final ClientContext clientContext = context.getClientContext();	//TODO see if this can provide us information from https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/lambda/model/InvokeRequest.Builder.html#clientContext(java.lang.String)
+		final BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(outputStream);
+		JSON_WRITER.writeValue(bufferedOutputStream, output); //Jackson, when writing `Optional<>`, will extract the value automatically, serializing `null` for `Optional.empty()`
+		bufferedOutputStream.flush();
+	}
+
+	private Stream<Method> declaredMethodsHavingName(@Nonnull final Class<?> clazz, @Nonnull final String methodName) { //TODO move to PLOOP
+		requireNonNull(methodName);
+		return declaredMethods(clazz).filter(method -> method.getName().equals(methodName));
+	}
+
+	private Stream<Method> declaredMethods(@Nonnull final Class<?> clazz) { //TODO move to PLOOP
+		return Stream.of(clazz.getDeclaredMethods());
 	}
 
 }

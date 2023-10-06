@@ -164,7 +164,6 @@ public abstract class AbstractDependencyConcern<C> implements DependencyConcern 
 		//flange-dependencies_platform-xxx.lst
 		final Optional<String> foundPlatform = Optional.ofNullable(System.getProperty("flange.platform"))
 				.or(() -> Optional.ofNullable(System.getenv("FLANGE_PLATFORM"))); //TODO use constants; refactor
-		System.out.println("found platform: " + foundPlatform); //TODO delete
 		foundPlatform.ifPresent(throwingConsumer(platform -> {
 			dependenciesLoadedFromListResource(DEPENDENCIES_LIST_PLATFORM_RESOURCE_NAME_FORMAT.formatted(platform)).forEach(dependency -> { //TODO consolidate interpolation code
 				final Class<?>[] interfaces = dependency.getInterfaces();
