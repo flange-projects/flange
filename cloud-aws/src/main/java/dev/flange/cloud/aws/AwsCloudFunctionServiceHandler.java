@@ -40,7 +40,7 @@ import io.clogr.Clogged;
  * @param <S> The type of backing service implementation.
  * @author Garret Wilson
  */
-public class FaasServiceLambdaHandler<S> implements RequestStreamHandler, Flanged, Clogged {
+public class AwsCloudFunctionServiceHandler<S> implements RequestStreamHandler, Flanged, Clogged {
 
 	private final S service;
 
@@ -58,7 +58,7 @@ public class FaasServiceLambdaHandler<S> implements RequestStreamHandler, Flange
 	 * @throws MissingDependencyException if an appropriate dependency of the requested type could not be found.
 	 * @throws DependencyException if there is some general error retrieving or creating the dependency.
 	 */
-	protected FaasServiceLambdaHandler(@Nonnull Class<S> serviceClass) {
+	protected AwsCloudFunctionServiceHandler(@Nonnull Class<S> serviceClass) {
 		this.service = getDependencyInstanceByType(serviceClass);
 	}
 

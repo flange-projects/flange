@@ -50,15 +50,16 @@ import com.globalmentor.model.ConfiguredStateException;
 import com.squareup.javapoet.*;
 
 import dev.flange.cloud.*;
+import dev.flange.cloud.aws.*;
 
 /**
- * Annotation processor for FaaS.
+ * Annotation processor for Flange Cloud.
  * @author Garret Wilson
  */
-public class FaasProcessor extends AbstractProcessor {
+public class FlangeCloudProcessor extends AbstractProcessor {
 
 	/** The fully qualified class names representing annotation type supported by this processor. */
-	public static final Set<String> SUPPORTED_ANNOTATION_TYPES = Stream.of(FaasService.class, ServiceConsumer.class).map(Class::getName)
+	public static final Set<String> SUPPORTED_ANNOTATION_TYPES = Stream.of(CloudFunctionService.class, ServiceConsumer.class).map(Class::getName)
 			.collect(toUnmodifiableSet());
 
 	/**
@@ -99,17 +100,17 @@ public class FaasProcessor extends AbstractProcessor {
 		return SourceVersion.latestSupported();
 	}
 
-	private static final ClassName ABSTRACT_FAAS_API_LAMBDA_STUB_CLASS_NAME = ClassName.get("dev.flange.cloud.aws", "AbstractFaasApiLambdaStub"); //TODO consider importing AWS classes
-	private static final ClassName FAAS_SERVICE_LAMBDA_HANDLER_CLASS_NAME = ClassName.get("dev.flange.cloud.aws", "FaasServiceLambdaHandler");
+	private static final ClassName ABSTRACT_AWS_CLOUD_FUNCTION_API_STUB_CLASS_NAME = ClassName.get(AbstractAwsCloudFunctionApiStub.class);
+	private static final ClassName AWS_CLOUD_FUNCTION_SERVICE_HANDLER_CLASS_NAME = ClassName.get(AwsCloudFunctionServiceHandler.class);
 
-	private static final String LAMBDA_STUB_CLASS_NAME_SUFFIX = "_FlangeLambdaStub"; //TODO rename to include "Aws"
-	private static final String LAMBDA_HANDLER_CLASS_NAME_SUFFIX = "_FlangeLambdaHandler"; //TODO rename to include "Aws"
+	private static final String AWS_CLOUD_FUNCTION_STUB_CLASS_NAME_SUFFIX = "_FlangeAwsLambdaStub";
+	private static final String AWS_CLOUD_FUNCTION_SKELETON_CLASS_NAME_SUFFIX = "_FlangeAwsLambdaSkeleton";
 
 	private static final String DEPENDENCIES_LIST_FILENAME = "flange-dependencies.lst"; //TODO reference constant from Flange
 	private static final String DEPENDENCIES_LIST_PLATFORM_AWS_FILENAME = "flange-dependencies_platform-aws.lst"; //TODO reference constant from Flange
 
 	private final Set<ClassName> cloudFunctionServiceImplClassNames = new HashSet<>();
-	private final Map<ClassName, ClassName> awsFunctionServiceSkeletonsByServiceApiClassNames = new HashMap<>();
+	private final Map<ClassName, Map.Entry<ClassName, ClassName>> awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames = new HashMap<>();
 	private final Map<TypeElement, Set<TypeElement>> consumerTypeElementsByCloudFunctionApiTypeElement = new HashMap<>(); //TODO tidy
 
 	@Override
@@ -117,25 +118,26 @@ public class FaasProcessor extends AbstractProcessor {
 		try {
 			//@CloudFunctionService
 			{
-				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(FaasService.class); //TODO create utility to get types and ensure there are no non-types
-				final Set<TypeElement> serviceTypeElements = typesIn(annotatedElements);
+				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(CloudFunctionService.class); //TODO create utility to get types and ensure there are no non-types
+				final Set<TypeElement> serviceImplTypeElements = typesIn(annotatedElements);
 				//TODO raise error if there are non-type elements
-				for(final TypeElement serviceTypeElement : serviceTypeElements) {
+				for(final TypeElement serviceImplTypeElement : serviceImplTypeElements) {
 
-					final Optional<DeclaredType> foundFaasApiAnnotatedInterfaceType = interfacesAnnotatedWith(processingEnv.getElementUtils(),
-							processingEnv.getTypeUtils(), serviceTypeElement, FaasApi.class).reduce(toFindOnly()); //TODO use improved reduction from JAVA-344 to provide an error if there are multiple interfaces found
-					if(!foundFaasApiAnnotatedInterfaceType.isPresent()) {
+					final Optional<DeclaredType> foundCloudFunctionApiAnnotatedInterfaceType = interfacesAnnotatedWith(processingEnv.getElementUtils(),
+							processingEnv.getTypeUtils(), serviceImplTypeElement, CloudFunctionApi.class).reduce(toFindOnly()); //TODO use improved reduction from JAVA-344 to provide an error if there are multiple interfaces found
+					if(!foundCloudFunctionApiAnnotatedInterfaceType.isPresent()) {
 						processingEnv.getMessager().printMessage(WARNING,
 								"Service `%s` implements no interfaces annotated with `@%s`; generated cloud function may not be accessible from other system components."
-										.formatted(serviceTypeElement, FaasApi.class.getSimpleName()));
+										.formatted(serviceImplTypeElement, CloudFunctionApi.class.getSimpleName()));
 					}
-					final ClassName serviceImplClassName = ClassName.get(serviceTypeElement);
+					final ClassName serviceImplClassName = ClassName.get(serviceImplTypeElement);
 					cloudFunctionServiceImplClassNames.add(serviceImplClassName);
-					final ClassName serviceApiClassName = foundFaasApiAnnotatedInterfaceType.map(DeclaredType::asElement).flatMap(asInstance(TypeElement.class))
+					final ClassName serviceApiClassName = foundCloudFunctionApiAnnotatedInterfaceType.map(DeclaredType::asElement).flatMap(asInstance(TypeElement.class))
 							.map(ClassName::get).orElse(serviceImplClassName); //if we can't find an API interface, use the service class name itself, although other components can't find it
-					final ClassName awsLambdaServiceHandlerClassName = generateAwsFunctionServiceSkeletonClass(serviceTypeElement);
-					awsFunctionServiceSkeletonsByServiceApiClassNames.put(serviceApiClassName, awsLambdaServiceHandlerClassName);
-					generateFaasServiceLambdaAssemblyDescriptor(serviceTypeElement);
+					final ClassName awsLambdaServiceHandlerClassName = generateAwsCloudFunctionServiceSkeletonClass(serviceImplTypeElement);
+					awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames.put(serviceApiClassName,
+							Map.entry(serviceImplClassName, awsLambdaServiceHandlerClassName));
+					generateCloudFunctionServiceAwsLambdaAssemblyDescriptor(serviceImplTypeElement);
 				}
 			}
 			//@ServiceClient
@@ -154,7 +156,7 @@ public class FaasProcessor extends AbstractProcessor {
 							.map(className -> findTypeElement(processingEnv.getElementUtils(), className) //consumed service type elements
 									.orElseThrow(() -> new IllegalStateException("Unable to find a single type element for service class `%s`.".formatted(className))))
 							.forEach(serviceTypeElement -> {
-								if(findAnnotationMirror(serviceTypeElement, FaasApi.class).isPresent()) {
+								if(findAnnotationMirror(serviceTypeElement, CloudFunctionApi.class).isPresent()) {
 									consumerTypeElementsByCloudFunctionApiTypeElement.computeIfAbsent(serviceTypeElement, __ -> new LinkedHashSet<>())
 											.add(serviceClientTypeElement);
 								}
@@ -165,17 +167,17 @@ public class FaasProcessor extends AbstractProcessor {
 				if(!cloudFunctionServiceImplClassNames.isEmpty()) {
 					generateFlangeDependenciesList(DEPENDENCIES_LIST_FILENAME, cloudFunctionServiceImplClassNames);
 				}
-				if(!awsFunctionServiceSkeletonsByServiceApiClassNames.isEmpty()) {
-					generateFaasServiceSamTemplate(awsFunctionServiceSkeletonsByServiceApiClassNames);
-					generateFaasServiceLambdaLog4jConfigFile();
+				if(!awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames.isEmpty()) {
+					generateAwsSamTemplate(awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames);
+					generateAwsCloudFunctionServiceLog4jConfigFile();
 				}
 				//TODO consider generating the first implementation during rounds if no others have been generated (see https://stackoverflow.com/q/27886169 for warning), and maybe checking current dependency list, if any, to support incremental compilation
 				if(!consumerTypeElementsByCloudFunctionApiTypeElement.isEmpty()) {
-					final Set<ClassName> awsFunctionStubClassNames = new HashSet<>();
+					final Set<ClassName> awsCloudFunctionStubClassNames = new HashSet<>();
 					consumerTypeElementsByCloudFunctionApiTypeElement.forEach(throwingBiConsumer((serviceApiTypeElement, serviceConsumerTypeElements) -> {
-						awsFunctionStubClassNames.add(generateAwsFunctionStubClass(serviceApiTypeElement, serviceConsumerTypeElements));
+						awsCloudFunctionStubClassNames.add(generateAwsCloudFunctionStubClass(serviceApiTypeElement, serviceConsumerTypeElements));
 					}));
-					generateFlangeDependenciesList(DEPENDENCIES_LIST_PLATFORM_AWS_FILENAME, awsFunctionStubClassNames);
+					generateFlangeDependenciesList(DEPENDENCIES_LIST_PLATFORM_AWS_FILENAME, awsCloudFunctionStubClassNames);
 				}
 			}
 		} catch(final IOException ioException) {
@@ -194,16 +196,16 @@ public class FaasProcessor extends AbstractProcessor {
 	 * @throws IOException if there is an I/O error writing the class.
 	 * @return The class name of the generated stub class.
 	 */
-	protected ClassName generateAwsFunctionStubClass(@Nonnull final TypeElement serviceApiTypeElement, @Nonnull Set<TypeElement> serviceConsumerTypeElements)
+	protected ClassName generateAwsCloudFunctionStubClass(@Nonnull final TypeElement serviceApiTypeElement, @Nonnull Set<TypeElement> serviceConsumerTypeElements)
 			throws IOException {
 		final ClassName serviceApiClassName = ClassName.get(serviceApiTypeElement);
 		//TODO this probably won't work correctly with incremental compiling, so find a consistent way to determine a good package name for the stub, or take care not to replace a previous one during incremental compilation
 		final String lambdaStubPackageName = findFirst(serviceConsumerTypeElements).map(ClassName::get).map(ClassName::packageName)
 				.orElseThrow(() -> new IllegalArgumentException("No service API consumers given."));
-		final ClassName awsLambdaStubClassName = ClassName.get(lambdaStubPackageName, serviceApiClassName.simpleName() + LAMBDA_STUB_CLASS_NAME_SUFFIX);
-		//`public final class ServiceApi_FlangeLambdaStub implements ServiceApi …`
+		final ClassName awsLambdaStubClassName = ClassName.get(lambdaStubPackageName, serviceApiClassName.simpleName() + AWS_CLOUD_FUNCTION_STUB_CLASS_NAME_SUFFIX);
+		//`public final class ServiceApi_FlangeAwsLambdaStub implements ServiceApi …`
 		final TypeSpec.Builder lambdaStubClassSpecBuilder = TypeSpec.classBuilder(awsLambdaStubClassName).addOriginatingElement(serviceApiTypeElement) //
-				.addModifiers(Modifier.PUBLIC, Modifier.FINAL).superclass(ABSTRACT_FAAS_API_LAMBDA_STUB_CLASS_NAME).addSuperinterface(serviceApiClassName) //
+				.addModifiers(Modifier.PUBLIC, Modifier.FINAL).superclass(ABSTRACT_AWS_CLOUD_FUNCTION_API_STUB_CLASS_NAME).addSuperinterface(serviceApiClassName) //
 				.addJavadoc("AWS Lambda stub for {@link $T}.", serviceApiClassName);
 		final DeclaredType futureUnboundedWildcardType = findUnboundedWildcardDeclaredType(processingEnv, Future.class).orElseThrow(IllegalStateException::new);
 		final DeclaredType completableFutureUnboundedWildcardType = findUnboundedWildcardDeclaredType(processingEnv, CompletableFuture.class)
@@ -246,11 +248,11 @@ public class FaasProcessor extends AbstractProcessor {
 	 * @throws IOException if there is an I/O error writing the class.
 	 * @return The class name of the generated skeleton class.
 	 */
-	protected ClassName generateAwsFunctionServiceSkeletonClass(@Nonnull final TypeElement serviceImplTypeElement) throws IOException {
+	protected ClassName generateAwsCloudFunctionServiceSkeletonClass(@Nonnull final TypeElement serviceImplTypeElement) throws IOException {
 		final ClassName serviceImplClassName = ClassName.get(serviceImplTypeElement);
 		final ClassName awsLambdaHandlerClassName = ClassName.get(serviceImplClassName.packageName(),
-				serviceImplClassName.simpleName() + LAMBDA_HANDLER_CLASS_NAME_SUFFIX);
-		final TypeName awsLambdaHandlerSuperClassName = ParameterizedTypeName.get(FAAS_SERVICE_LAMBDA_HANDLER_CLASS_NAME, serviceImplClassName);
+				serviceImplClassName.simpleName() + AWS_CLOUD_FUNCTION_SKELETON_CLASS_NAME_SUFFIX);
+		final TypeName awsLambdaHandlerSuperClassName = ParameterizedTypeName.get(AWS_CLOUD_FUNCTION_SERVICE_HANDLER_CLASS_NAME, serviceImplClassName);
 		//TODO look at the implemented interfaces to determine the API name to use, not the implementation
 		//`public final class MyServiceImpl_FlangeLambdaHandler …`
 		final TypeSpec awsLambdaHandlerClassSpec = TypeSpec.classBuilder(awsLambdaHandlerClassName).addOriginatingElement(serviceImplTypeElement) //
@@ -273,17 +275,17 @@ public class FaasProcessor extends AbstractProcessor {
 
 	/**
 	 * Generates the AWS Lambda assembly descriptor for a FaaS service implementation.
-	 * @param faasServiceImplTypeElement The element representing the implementation of the FaaS service for which an assembly will be created.
+	 * @param cloudFunctionServiceImplTypeElement The element representing the implementation of the FaaS service for which an assembly will be created.
 	 * @throws IOException if there is an I/O error writing the assembly descriptor.
 	 */
-	protected void generateFaasServiceLambdaAssemblyDescriptor(@Nonnull final TypeElement faasServiceImplTypeElement) throws IOException {
-		final String lambdaHandlerClassSimpleName = faasServiceImplTypeElement.getSimpleName() + LAMBDA_HANDLER_CLASS_NAME_SUFFIX;
-		final String assemblyDescriptorFilename = "assembly-" + lambdaHandlerClassSimpleName + "-aws-lambda.xml"; //TODO use constant
+	protected void generateCloudFunctionServiceAwsLambdaAssemblyDescriptor(@Nonnull final TypeElement cloudFunctionServiceImplTypeElement) throws IOException {
+		final String assemblyDescriptorFilename = "assembly-" + cloudFunctionServiceImplTypeElement.getSimpleName() + "-aws-lambda.xml"; //TODO use constant
 		try (
 				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_ASSEMBLY_DESCRIPTOR_AWS_LAMBDA)
 						.orElseThrow(() -> new ConfiguredStateException("Missing class resource `%s`.".formatted(RESOURCE_ASSEMBLY_DESCRIPTOR_AWS_LAMBDA)));
 				final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, UTF_8))) {
-			final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", assemblyDescriptorFilename, faasServiceImplTypeElement);
+			final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", assemblyDescriptorFilename,
+					cloudFunctionServiceImplTypeElement);
 			try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
 				String line; //write individual lines to produce line endings consistent with system; note that this will also normalize the file to end with a line ending
 				while((line = bufferedReader.readLine()) != null) {
@@ -306,8 +308,8 @@ public class FaasProcessor extends AbstractProcessor {
 			throws IOException {
 		final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", relativeResourcePath);
 		try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
-			for(final ClassName faasServiceLambdaHandlerClassName : dependencyClassNames) {
-				writer.write(faasServiceLambdaHandlerClassName.canonicalName());
+			for(final ClassName dependencyClassName : dependencyClassNames) {
+				writer.write(dependencyClassName.canonicalName());
 				writer.write(lineSeparator());
 			}
 		}
@@ -319,7 +321,7 @@ public class FaasProcessor extends AbstractProcessor {
 	 *           as many AWS Lambda instances are configured for the project.
 	 * @throws IOException if there is an I/O error writing the Log4j config file.
 	 */
-	protected void generateFaasServiceLambdaLog4jConfigFile() throws IOException {
+	protected void generateAwsCloudFunctionServiceLog4jConfigFile() throws IOException {
 		final String log4jConfigFilename = "log4j2-aws-lambda.xml"; //TODO use constant, or use defined resource name
 		try (
 				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_LOG4J_CONFIG_AWS_LAMBDA)
@@ -338,11 +340,12 @@ public class FaasProcessor extends AbstractProcessor {
 
 	/**
 	 * Generates the SAM template for deploying a FaaS service implementation.
-	 * @param awsFunctionServiceSkeletonsByServiceApiClassNames The class names of the generated AWS Lambda handler skeleton classes; each associated with the
-	 *          class name of the service API class, which is typically an interface.
+	 * @param awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames The class names of the service implementations and generated AWS Lambda handler skeleton
+	 *          classes; each pair associated with the class name of the service API class, which is typically an interface.
 	 * @throws IOException if there is an I/O error writing the SAM template.
 	 */
-	protected void generateFaasServiceSamTemplate(@Nonnull final Map<ClassName, ClassName> awsFunctionServiceSkeletonsByServiceApiClassNames) throws IOException {
+	protected void generateAwsSamTemplate(
+			@Nonnull final Map<ClassName, Map.Entry<ClassName, ClassName>> awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames) throws IOException {
 		final String samFilename = "sam.yaml"; //TODO use constant
 		try (
 				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_SAM_INTRO)
@@ -357,7 +360,7 @@ public class FaasProcessor extends AbstractProcessor {
 				}
 				writer.write("%n".formatted()); //TODO eventually parse and interpolate the original YAML file
 				writer.write("Resources:%n%n".formatted());
-				awsFunctionServiceSkeletonsByServiceApiClassNames.forEach(throwingBiConsumer((serviceApiClassName, serviceSkeletonClassName) -> {
+				awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames.forEach(throwingBiConsumer((serviceApiClassName, serviceImplSkeletonClassNameEntry) -> {
 					writer.write("  %s:%n".formatted(serviceApiClassName.simpleName().replace("_", ""))); //TODO refactor using logical ID sanitizing method
 					writer.write("    Type: AWS::Serverless::Function%n".formatted());
 					writer.write("    Properties:%n".formatted());
@@ -366,8 +369,8 @@ public class FaasProcessor extends AbstractProcessor {
 					writer.write("        Bucket:%n".formatted());
 					writer.write("          Fn::ImportValue:%n".formatted());
 					writer.write("            !Sub \"flange-${Env}:StagingBucketName\"%n".formatted());
-					writer.write("        Key: !Sub \"%s-aws-lambda.zip\"%n".formatted(serviceSkeletonClassName.simpleName())); //TODO later interpolate version 
-					writer.write("      Handler: %s::%s%n".formatted(serviceSkeletonClassName.canonicalName(), "handleRequest")); //TODO use constant
+					writer.write("        Key: !Sub \"%s-aws-lambda.zip\"%n".formatted(serviceImplSkeletonClassNameEntry.getKey().simpleName())); //TODO later interpolate version 
+					writer.write("      Handler: %s::%s%n".formatted(serviceImplSkeletonClassNameEntry.getValue().canonicalName(), "handleRequest")); //TODO use constant
 					//TODO add environment variable for active profiles
 				}));
 			}

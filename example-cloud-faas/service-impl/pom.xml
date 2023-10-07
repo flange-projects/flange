@@ -82,10 +82,10 @@
 						</goals>
 						<configuration>
 							<!-- TODO find a way to add configurations dynamically, probably by developing a new Maven plugin and delegating to the Maven Assembly Plugin -->
-							<finalName>MessageServiceImpl_FlangeLambdaHandler</finalName> <!-- TODO include project in base name when generating from Maven plugin -->
+							<finalName>MessageServiceImpl</finalName> <!-- TODO include project in base name when generating from Maven plugin -->
 							<appendAssemblyId>true</appendAssemblyId>
 							<descriptors>
-								<descriptor>${project.build.directory}/generated-sources/annotations/assembly-MessageServiceImpl_FlangeLambdaHandler-aws-lambda.xml</descriptor>
+								<descriptor>${project.build.directory}/generated-sources/annotations/assembly-MessageServiceImpl-aws-lambda.xml</descriptor>
 							</descriptors>
 						</configuration>
 					</execution>

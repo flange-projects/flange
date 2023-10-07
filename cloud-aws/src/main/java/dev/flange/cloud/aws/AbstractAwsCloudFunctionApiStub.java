@@ -30,7 +30,7 @@ import javax.annotation.*;
 import com.fasterxml.classmate.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
-import dev.flange.cloud.FaasApi;
+import dev.flange.cloud.CloudFunctionApi;
 import io.clogr.Clogged;
 import io.confound.Confounded;
 import software.amazon.awssdk.core.SdkBytes;
@@ -41,7 +41,7 @@ import software.amazon.awssdk.services.lambda.model.*;
  * Abstract base class for implementing an AWS Lambda stub for a FaaS API.
  * @author Garret Wilson
  */
-public abstract class AbstractFaasApiLambdaStub implements Clogged, Confounded {
+public abstract class AbstractAwsCloudFunctionApiStub implements Clogged, Confounded {
 
 	private final LambdaClient lambdaClient;
 
@@ -59,17 +59,17 @@ public abstract class AbstractFaasApiLambdaStub implements Clogged, Confounded {
 	protected String getSkeletonCloudFunctionName(@Nonnull final String methodName) {
 		final Class<?> stubClass = getClass();
 		//TODO improve by caching the service API class and/or initializing the base class with the cloud function name, although this may pose problems with an environment name placeholder; keep in mind supporting other types of stubs in the future, e.g. for `@CloudFunctionApplication`, or `@CloudFunctions` representing a collection of functions
-		final Class<?> serviceApiClass = Stream.of(stubClass.getInterfaces()).filter(interfaceClass -> interfaceClass.isAnnotationPresent(FaasApi.class)) //TODO create utility method for finding annotated interface 
+		final Class<?> serviceApiClass = Stream.of(stubClass.getInterfaces()).filter(interfaceClass -> interfaceClass.isAnnotationPresent(CloudFunctionApi.class)) //TODO create utility method for finding annotated interface 
 				.reduce(toFindOnly(() -> new IllegalStateException(
-						"Multiple interfaces annotated with `@%s` not supported for stub class `%s`.".formatted(FaasApi.class.getSimpleName(), stubClass.getName()))))
+						"Multiple interfaces annotated with `@%s` not supported for stub class `%s`.".formatted(CloudFunctionApi.class.getSimpleName(), stubClass.getName()))))
 				.orElseThrow(() -> new IllegalStateException("Stub class `%s` does not seem to implement a service API, e.g. annotated with `@%s`."
-						.formatted(stubClass.getName(), FaasApi.class.getSimpleName())));
+						.formatted(stubClass.getName(), CloudFunctionApi.class.getSimpleName())));
 		final String env = getConfiguration().getString("flange.env"); //TODO use constant
 		return "flange-%s-%s".formatted(env, serviceApiClass.getSimpleName());
 	}
 
 	/** Constructor. */
-	public AbstractFaasApiLambdaStub() {
+	public AbstractAwsCloudFunctionApiStub() {
 		lambdaClient = LambdaClient.builder().build();
 	}
 

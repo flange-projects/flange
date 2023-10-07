@@ -36,6 +36,11 @@
 		</dependency>
 
 		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-cloud-aws</artifactId>
+		</dependency>
+
+		<dependency>
 			<groupId>org.zalando</groupId>
 			<artifactId>faux-pas</artifactId>
 		</dependency>

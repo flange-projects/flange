@@ -20,14 +20,14 @@ import static java.util.concurrent.CompletableFuture.*;
 
 import java.util.concurrent.CompletableFuture;
 
-import dev.flange.cloud.FaasService;
+import dev.flange.cloud.CloudFunctionService;
 import dev.flange.example.cloud.faas.service.api.MessageService;
 
 /**
  * Implementation of a service for producing messages.
  * @author Garret Wilson
  */
-@FaasService
+@CloudFunctionService
 public class MessageServiceImpl implements MessageService {
 
 	@Override

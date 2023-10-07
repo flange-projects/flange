@@ -18,13 +18,13 @@ package dev.flange.example.cloud.faas.service.api;
 
 import java.util.concurrent.CompletableFuture;
 
-import dev.flange.cloud.FaasApi;
+import dev.flange.cloud.CloudFunctionApi;
 
 /**
  * Service for producing messages.
  * @author Garret Wilson
  */
-@FaasApi
+@CloudFunctionApi
 public interface MessageService {
 
 	/** @return A greeting to use in a message. */
