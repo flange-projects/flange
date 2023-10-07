@@ -56,7 +56,7 @@ import dev.flange.cloud.aws.*;
  * Annotation processor for Flange Cloud.
  * @author Garret Wilson
  */
-public class FlangeCloudProcessor extends AbstractProcessor {
+public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 
 	/** The fully qualified class names representing annotation type supported by this processor. */
 	public static final Set<String> SUPPORTED_ANNOTATION_TYPES = Stream.of(CloudFunctionService.class, ServiceConsumer.class).map(Class::getName)
