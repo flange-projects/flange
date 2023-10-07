@@ -41,7 +41,6 @@
 		<module>build</module>
 		<module>cloud</module>
 		<module>cloud-aws</module>
-		<module>example-cloud-faas</module>
 	</modules>
 
 	<dependencyManagement>
