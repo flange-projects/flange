@@ -18,12 +18,12 @@ package dev.flange.build.cloud;
 
 import static com.globalmentor.collections.iterables.Iterables.*;
 import static com.globalmentor.io.ClassResources.*;
-import static com.globalmentor.java.Conditions.*;
 import static com.globalmentor.java.Objects.*;
+import static com.globalmentor.java.model.ModelElements.*;
+import static com.globalmentor.java.model.ModelTypes.*;
 import static com.globalmentor.util.stream.Streams.*;
 import static java.lang.System.*;
 import static java.nio.charset.StandardCharsets.*;
-import static java.util.Objects.*;
 import static java.util.stream.Collectors.*;
 import static javax.lang.model.util.ElementFilter.*;
 import static javax.tools.Diagnostic.Kind.*;
@@ -31,10 +31,8 @@ import static javax.tools.StandardLocation.*;
 import static org.zalando.fauxpas.FauxPas.*;
 
 import java.io.*;
-import java.lang.annotation.Annotation;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import javax.annotation.*;
@@ -42,10 +40,10 @@ import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
 import javax.lang.model.type.*;
-import javax.lang.model.util.*;
 import javax.tools.FileObject;
 
 import com.fasterxml.classmate.GenericType;
+import com.globalmentor.java.model.BaseAnnotationProcessor;
 import com.globalmentor.model.ConfiguredStateException;
 import com.squareup.javapoet.*;
 
@@ -56,7 +54,7 @@ import dev.flange.cloud.aws.*;
  * Annotation processor for Flange Cloud.
  * @author Garret Wilson
  */
-public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
+public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 
 	/** The fully qualified class names representing annotation type supported by this processor. */
 	public static final Set<String> SUPPORTED_ANNOTATION_TYPES = Stream.of(CloudFunctionService.class, ServiceConsumer.class).map(Class::getName)
@@ -123,10 +121,10 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 				//TODO raise error if there are non-type elements
 				for(final TypeElement serviceImplTypeElement : serviceImplTypeElements) {
 
-					final Optional<DeclaredType> foundCloudFunctionApiAnnotatedInterfaceType = interfacesAnnotatedWith(processingEnv.getElementUtils(),
-							processingEnv.getTypeUtils(), serviceImplTypeElement, CloudFunctionApi.class).reduce(toFindOnly()); //TODO use improved reduction from JAVA-344 to provide an error if there are multiple interfaces found
+					final Optional<DeclaredType> foundCloudFunctionApiAnnotatedInterfaceType = elementInterfacesAnnotatedWith(serviceImplTypeElement,
+							CloudFunctionApi.class).reduce(toFindOnly()); //TODO use improved reduction from JAVA-344 to provide an error if there are multiple interfaces found
 					if(!foundCloudFunctionApiAnnotatedInterfaceType.isPresent()) {
-						processingEnv.getMessager().printMessage(WARNING,
+						getProcessingEnvironment().getMessager().printMessage(WARNING,
 								"Service `%s` implements no interfaces annotated with `@%s`; generated cloud function may not be accessible from other system components."
 										.formatted(serviceImplTypeElement, CloudFunctionApi.class.getSimpleName()));
 					}
@@ -146,17 +144,17 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 				final Set<TypeElement> serviceTypeClientElements = typesIn(annotatedElements);
 				//TODO raise error if there are non-type elements
 				for(final TypeElement serviceClientTypeElement : serviceTypeClientElements) {
-					final AnnotationMirror serviceConsumerAnnotationMirror = findAnnotationMirror(serviceClientTypeElement, ServiceConsumer.class)
+					final AnnotationMirror serviceConsumerAnnotationMirror = findElementAnnotationMirrorForClass(serviceClientTypeElement, ServiceConsumer.class)
 							.orElseThrow(AssertionError::new); //we already know it has the annotation
 					@SuppressWarnings("unchecked")
-					final List<? extends AnnotationValue> serviceClassAnnotationValues = findValueElementValue(serviceConsumerAnnotationMirror)
+					final List<? extends AnnotationValue> serviceClassAnnotationValues = findAnnotationValueElementValue(serviceConsumerAnnotationMirror)
 							.map(AnnotationValue::getValue).flatMap(asInstance(List.class)).orElseThrow(() -> new IllegalStateException(
 									"The `@%s` annotation of the element `%s` has no array value.".formatted(ServiceConsumer.class.getSimpleName(), serviceClientTypeElement)));
 					serviceClassAnnotationValues.stream().map(AnnotationValue::getValue).map(Object::toString) //consumed service class names
-							.map(className -> findTypeElement(processingEnv.getElementUtils(), className) //consumed service type elements
+							.map(className -> findTypeElementForCanonicalName(className) //consumed service type elements
 									.orElseThrow(() -> new IllegalStateException("Unable to find a single type element for service class `%s`.".formatted(className))))
 							.forEach(serviceTypeElement -> {
-								if(findAnnotationMirror(serviceTypeElement, CloudFunctionApi.class).isPresent()) {
+								if(findElementAnnotationMirrorForClass(serviceTypeElement, CloudFunctionApi.class).isPresent()) {
 									consumerTypeElementsByCloudFunctionApiTypeElement.computeIfAbsent(serviceTypeElement, __ -> new LinkedHashSet<>())
 											.add(serviceClientTypeElement);
 								}
@@ -181,7 +179,7 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 				}
 			}
 		} catch(final IOException ioException) {
-			processingEnv.getMessager().printMessage(ERROR, ioException.getMessage()); //TODO improve
+			getProcessingEnvironment().getMessager().printMessage(ERROR, ioException.getMessage()); //TODO improve
 		}
 
 		return true;
@@ -207,8 +205,8 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 		final TypeSpec.Builder lambdaStubClassSpecBuilder = TypeSpec.classBuilder(awsLambdaStubClassName).addOriginatingElement(serviceApiTypeElement) //
 				.addModifiers(Modifier.PUBLIC, Modifier.FINAL).superclass(ABSTRACT_AWS_CLOUD_FUNCTION_API_STUB_CLASS_NAME).addSuperinterface(serviceApiClassName) //
 				.addJavadoc("AWS Lambda stub for {@link $T}.", serviceApiClassName);
-		final DeclaredType futureUnboundedWildcardType = findUnboundedWildcardDeclaredType(processingEnv, Future.class).orElseThrow(IllegalStateException::new);
-		final DeclaredType completableFutureUnboundedWildcardType = findUnboundedWildcardDeclaredType(processingEnv, CompletableFuture.class)
+		final DeclaredType futureUnboundedWildcardType = findDeclaredTypeWithUnboundedWildcardForClass(Future.class).orElseThrow(IllegalStateException::new);
+		final DeclaredType completableFutureUnboundedWildcardType = findDeclaredTypeWithUnboundedWildcardForClass(CompletableFuture.class)
 				.orElseThrow(IllegalStateException::new);
 		methodsIn(serviceApiTypeElement.getEnclosedElements()).forEach(methodElement -> {
 			if(methodElement.isDefault()) { //don't override default method implementations
@@ -217,15 +215,15 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 			final String methodName = methodElement.getSimpleName().toString();
 			final TypeMirror returnTypeMirror = methodElement.getReturnType();
 			if(returnTypeMirror instanceof final DeclaredType returnDeclaredType
-					&& (processingEnv.getTypeUtils().isAssignable(returnTypeMirror, futureUnboundedWildcardType) //Future<?>
-							|| processingEnv.getTypeUtils().isAssignable(returnTypeMirror, completableFutureUnboundedWildcardType) //CompletableFuture<?>
+					&& (getProcessingEnvironment().getTypeUtils().isAssignable(returnTypeMirror, futureUnboundedWildcardType) //Future<?> TODO improve check with utility
+							|| getProcessingEnvironment().getTypeUtils().isAssignable(returnTypeMirror, completableFutureUnboundedWildcardType) //CompletableFuture<?>
 			)) {
 				final TypeMirror typeArgument = getOnly(returnDeclaredType.getTypeArguments(), IllegalStateException::new); //CompletableFuture<?> is expected to only have one type argument
 				final MethodSpec.Builder methodSpecBuilder = MethodSpec.overriding(methodElement); //TODO comment
 				methodSpecBuilder.addStatement("return invokeAsync(new $T<$L>(){}, $S)", GenericType.class, typeArgument, methodName); //TODO finish; add parameters
 				lambdaStubClassSpecBuilder.addMethod(methodSpecBuilder.build());
 			} else {
-				processingEnv.getMessager().printMessage(ERROR,
+				getProcessingEnvironment().getMessager().printMessage(ERROR,
 						"Currently only `Future<?>` or `CompletableFuture<?>` return types are supported for cloud function APIs; found `%s`.".formatted(returnTypeMirror));
 			}
 		});
@@ -238,7 +236,7 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 
 						_Normally this file should not be edited manually._""") //
 				.skipJavaLangImports(true).build();
-		lambdaHandlerClassJavaFile.writeTo(processingEnv.getFiler());
+		lambdaHandlerClassJavaFile.writeTo(getProcessingEnvironment().getFiler());
 		return awsLambdaStubClassName;
 	}
 
@@ -269,7 +267,7 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 
 						_Normally this file should not be edited manually._""") //
 				.skipJavaLangImports(true).build();
-		awsLambdaHandlerClassJavaFile.writeTo(processingEnv.getFiler());
+		awsLambdaHandlerClassJavaFile.writeTo(getProcessingEnvironment().getFiler());
 		return awsLambdaHandlerClassName;
 	}
 
@@ -284,7 +282,7 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_ASSEMBLY_DESCRIPTOR_AWS_LAMBDA)
 						.orElseThrow(() -> new ConfiguredStateException("Missing class resource `%s`.".formatted(RESOURCE_ASSEMBLY_DESCRIPTOR_AWS_LAMBDA)));
 				final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, UTF_8))) {
-			final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", assemblyDescriptorFilename,
+			final FileObject outputFileObject = getProcessingEnvironment().getFiler().createResource(SOURCE_OUTPUT, "", assemblyDescriptorFilename,
 					cloudFunctionServiceImplTypeElement);
 			try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
 				String line; //write individual lines to produce line endings consistent with system; note that this will also normalize the file to end with a line ending
@@ -306,7 +304,7 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 	 */
 	protected void generateFlangeDependenciesList(@Nonnull final CharSequence relativeResourcePath, @Nonnull final Set<ClassName> dependencyClassNames)
 			throws IOException {
-		final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", relativeResourcePath);
+		final FileObject outputFileObject = getProcessingEnvironment().getFiler().createResource(SOURCE_OUTPUT, "", relativeResourcePath);
 		try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
 			for(final ClassName dependencyClassName : dependencyClassNames) {
 				writer.write(dependencyClassName.canonicalName());
@@ -327,7 +325,7 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_LOG4J_CONFIG_AWS_LAMBDA)
 						.orElseThrow(() -> new ConfiguredStateException("Missing class resource `%s`.".formatted(RESOURCE_LOG4J_CONFIG_AWS_LAMBDA)));
 				final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, UTF_8))) {
-			final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", log4jConfigFilename);
+			final FileObject outputFileObject = getProcessingEnvironment().getFiler().createResource(SOURCE_OUTPUT, "", log4jConfigFilename);
 			try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
 				String line; //write individual lines to produce line endings consistent with system; note that this will also normalize the file to end with a line ending
 				while((line = bufferedReader.readLine()) != null) {
@@ -351,7 +349,7 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_SAM_INTRO)
 						.orElseThrow(() -> new ConfiguredStateException("Missing class resource `%s`.".formatted(RESOURCE_SAM_INTRO)));
 				final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, UTF_8))) {
-			final FileObject outputFileObject = processingEnv.getFiler().createResource(SOURCE_OUTPUT, "", samFilename);
+			final FileObject outputFileObject = getProcessingEnvironment().getFiler().createResource(SOURCE_OUTPUT, "", samFilename);
 			try (final Writer writer = new OutputStreamWriter(new BufferedOutputStream(outputFileObject.openOutputStream()), UTF_8)) {
 				String line; //write individual lines to produce line endings consistent with system; note that this will also ensure a trailing newline
 				while((line = bufferedReader.readLine()) != null) {
@@ -375,237 +373,6 @@ public class FlangeCloudAnnotationProcessor extends AbstractProcessor {
 				}));
 			}
 		}
-	}
-
-	//## Elements
-
-	/**
-	 * Retrieves an annotation mirror from a type element for annotations of a particular type.
-	 * @implSpec This implementation does not check for repeated annotations.
-	 * @param typeElement The type element representing the type potentially annotated with the specified annotation.
-	 * @param annotationClass The type of annotation to find.
-	 * @return The mirrors for the annotation annotating the indicated type, if any.
-	 */
-	static Optional<? extends AnnotationMirror> findAnnotationMirror(@Nonnull final TypeElement typeElement,
-			@Nonnull final Class<? extends Annotation> annotationClass) {
-		return annotationMirrors(typeElement, annotationClass).findAny();
-	}
-
-	/**
-	 * Retrieves all the annotation mirrors from a type element for annotations of a particular type.
-	 * @param typeElement The type element representing the type potentially annotated with the specified annotation.
-	 * @param annotationClass The type of annotation to find.
-	 * @return The mirrors for the annotation(s) annotating the indicated type, if any.
-	 */
-	static Stream<? extends AnnotationMirror> annotationMirrors(@Nonnull final TypeElement typeElement,
-			@Nonnull final Class<? extends Annotation> annotationClass) {
-		final String canonicalName = annotationClass.getCanonicalName();
-		checkArgument(canonicalName != null, "Annotation class `%s` has no canonical name.", annotationClass.getName()); //check for completeness; not realistically possible: an annotation cannot be defined as an anonymous inner class
-		return typeElement.getAnnotationMirrors().stream().filter(annotationMirror -> {
-			final Element annotationElement = annotationMirror.getAnnotationType().asElement();
-			assert annotationElement instanceof TypeElement : "An annotation mirror type's element should always be a `TypeElement`.";
-			return ((TypeElement)annotationElement).getQualifiedName().contentEquals(canonicalName);
-		});
-	}
-
-	//TODO document, comparing with `annotationMirrors(…)`
-	static Stream<? extends TypeMirror> interfacesAssignableTo(@Nonnull final Elements elements, @Nonnull final Types types, //TODO perhaps delete; `interfacesAnnotatedWith` was probably desired
-			@Nonnull final TypeElement typeElement, @Nonnull final Class<?> interfaceClass) {
-		checkArgument(interfaceClass.isInterface(), "Class `%s` does not represent an interface.", interfaceClass.getName());
-		return typeElement.getInterfaces().stream().filter(isAssignableTo(elements, types, interfaceClass));
-	}
-
-	//TODO document
-	static Stream<DeclaredType> interfacesAnnotatedWith(@Nonnull final Elements elements, @Nonnull final Types types, @Nonnull final TypeElement typeElement,
-			@Nonnull final Class<? extends Annotation> annotationClass) {
-		return typeElement.getInterfaces().stream().flatMap(asInstances(DeclaredType.class))
-				.filter(interfaceType -> findAnnotationMirror((TypeElement)interfaceType.asElement(), annotationClass).isPresent());
-	}
-
-	//## Mirrors
-
-	/**
-	 * Finds the annotation value mapped to the <code>value</code> element from an annotation mirror.
-	 * @apiNote The <code>value</code> element is the special element which allows the element value to be left out in the source file.
-	 * @implSpec This implementation delegates to {@link #findElementValueBySimpleName(AnnotationMirror, CharSequence)}.
-	 * @param annotationMirror The annotation mirror in which to look up an element value.
-	 * @return The annotation value if found.
-	 */
-	static Optional<? extends AnnotationValue> findValueElementValue(@Nonnull AnnotationMirror annotationMirror) {
-		return findElementValueBySimpleName(annotationMirror, "value"); //TODO use constant
-	}
-
-	/**
-	 * Finds the annotation value mapped to the executable element with the given simple name from an annotation mirror.
-	 * @implSpec This implementation calls {@link AnnotationMirror#getElementValues()} and then delegates to
-	 *           {@link #findElementValueBySimpleName(Map, CharSequence)}.
-	 * @param annotationMirror The annotation mirror in which to look up an element value.
-	 * @param simpleName The simple name (i.e. property name) of the value to retrieve.
-	 * @return The annotation value if found.
-	 */
-	static Optional<? extends AnnotationValue> findElementValueBySimpleName(@Nonnull AnnotationMirror annotationMirror, @Nonnull final CharSequence simpleName) {
-		return findElementValueBySimpleName(annotationMirror.getElementValues(), simpleName);
-	}
-
-	/**
-	 * Finds the annotation value mapped to the executable element with the given simple name.
-	 * @apiNote This is useful for finding a value of an {@link AnnotationMirror} from the map returned by {@link AnnotationMirror#getElementValues()}.
-	 * @param elementValues The map of element values associated with their executable elements (e.g. accessor methods of an annotation mirror).
-	 * @param simpleName The simple name (i.e. element name) of the value to retrieve.
-	 * @return The annotation value if found.
-	 * @see <a href="https://area-51.blog/2009/02/13/getting-class-values-from-annotations-in-an-annotationprocessor/">Getting Class values from Annotations in an
-	 *      AnnotationProcessor</a>
-	 */
-	static Optional<? extends AnnotationValue> findElementValueBySimpleName(
-			@Nonnull final Map<? extends ExecutableElement, ? extends AnnotationValue> elementValues, @Nonnull final CharSequence simpleName) {
-		requireNonNull(simpleName);
-		return elementValues.entrySet().stream().filter(entry -> entry.getKey().getSimpleName().contentEquals(simpleName)).findAny().map(Map.Entry::getValue);
-	}
-
-	//## Types 
-
-	//## ProcessingEnvironment
-
-	//### Elements Utilities
-
-	//TODO probably move a lot of the methods requiring `Elements` and `Types` up to the `Elements` section, as many of them are so fundamental (and the utilities are part of `javax.lang.model.util`), even though they assume some processing environment to get a utilities instance 
-
-	/**
-	 * Tests whether a type is assignable to the type corresponding to the given class (i.e. whether instances of each would have an <code>instanceof</code>
-	 * relationship).
-	 * @implSpec This implementation calls {@link #findDeclaredType(Elements, Types, Class, TypeMirror...)}.
-	 * @param elements The element utilities.
-	 * @param types The type utilities.
-	 * @param typeMirror The type to test.
-	 * @param clazz The class representing the type against which to compare for assignability.
-	 * @return <code>true</code> if the type is assignable to the type represented by the class.
-	 * @throws IllegalArgumentException if no type could be found for the given class; or given a type for an executable, package, or module is invalid.
-	 * @see Types#isAssignable(TypeMirror, TypeMirror)
-	 */
-	static boolean isAssignableTo(@Nonnull final Elements elements, @Nonnull final Types types, TypeMirror typeMirror, @Nonnull final Class<?> clazz) {
-		/*TODO delete probably
-				return types.isAssignable(typeMirror, findDeclaredType(elements, types, clazz)
-						.orElseThrow(() -> new IllegalArgumentException("No declared type found for class `%s`.`".formatted(clazz.getName()))));
-		*/
-		return isAssignableTo(elements, types, clazz).test(typeMirror);
-	}
-
-	static Predicate<TypeMirror> isAssignableTo(@Nonnull final Elements elements, @Nonnull final Types types, @Nonnull final Class<?> clazz) { //TODO document
-		final TypeMirror classType = findDeclaredType(elements, types, clazz)
-				.orElseThrow(() -> new IllegalArgumentException("No declared type found for class `%s`.`".formatted(clazz.getName())));
-		return type -> types.isAssignable(type, classType);
-	}
-
-	/**
-	 * Finds a returns a type element from a class if the type element is uniquely determinable in the environment.
-	 * @implSpec This implementation delegates to {@link #findTypeElement(Elements, CharSequence)}.
-	 * @param elements The element utilities.
-	 * @param clazz The class for which a type element is to be found.
-	 * @return The type element for the class, which will not be present if no type element can be uniquely determined.
-	 * @see ProcessingEnvironment#getElementUtils()
-	 * @see Class#getCanonicalName()
-	 */
-	static Optional<TypeElement> findTypeElement(@Nonnull final Elements elements, @Nonnull final Class<?> clazz) { //TODO create module-related variations as well
-		return findTypeElement(elements, clazz.getCanonicalName());
-	}
-
-	/**
-	 * Finds a returns a type element given its canonical name if the type element is uniquely determinable in the environment.
-	 * @apiNote This method functions identically to {@link Elements#getTypeElement(CharSequence)} except that it returns an {@link Optional} and never
-	 *          <code>null</code>.
-	 * @implSpec This implementation delegates to {@link Elements#getTypeElement(CharSequence)}.
-	 * @param elements The element utilities.
-	 * @param canonicalName The canonical name of the type element to return.
-	 * @return The named type element, which will not be present if no type element can be uniquely determined.
-	 * @see ProcessingEnvironment#getElementUtils()
-	 */
-	static Optional<TypeElement> findTypeElement(@Nonnull final Elements elements, @Nonnull final CharSequence canonicalName) { //TODO create module-related variations as well
-		return Optional.ofNullable(elements.getTypeElement(canonicalName));
-	}
-
-	/**
-	 * Finds a returns a type corresponding to a class type element and actual type arguments, if the type element is uniquely determinable in the environment.
-	 * @implSpec This implementation delegates to {@link #findTypeElement(Elements, Class)} followed by {@link Types#getDeclaredType(TypeElement, TypeMirror...)}.
-	 * @param elements The element utilities.
-	 * @param types The type utilities.
-	 * @param clazz The class for which a type element is to be found.
-	 * @param typeArgs The actual type arguments.
-	 * @return The type element for the class, which will not be present if no type element can be uniquely determined.
-	 * @see ProcessingEnvironment#getElementUtils()
-	 * @see Class#getCanonicalName()
-	 * @see Elements#getTypeElement(CharSequence)
-	 * @see Types#getDeclaredType(TypeElement, TypeMirror...)
-	 */
-	static Optional<DeclaredType> findDeclaredType(@Nonnull final Elements elements, @Nonnull final Types types, @Nonnull final Class<?> clazz,
-			@Nonnull final TypeMirror... typeArgs) {
-		return findTypeElement(elements, clazz).map(typeElement -> types.getDeclaredType(typeElement, typeArgs));
-	}
-
-	/**
-	 * Finds a returns a type corresponding to a class type element and actual type arguments, if the type element is uniquely determinable in the environment.
-	 * @implSpec This implementation delegates to {@link #findDeclaredType(Elements, Types, Class, TypeMirror...)}.
-	 * @param processingEnvironment The processing environment.
-	 * @param clazz The class for which a type element is to be found.
-	 * @param typeArgs The actual type arguments.
-	 * @return The type element for the class, which will not be present if no type element can be uniquely determined.
-	 * @see ProcessingEnvironment#getElementUtils()
-	 * @see Class#getCanonicalName()
-	 * @see Elements#getTypeElement(CharSequence)
-	 * @see Types#getDeclaredType(TypeElement, TypeMirror...)
-	 * @see ProcessingEnvironment#getElementUtils()
-	 * @see ProcessingEnvironment#getTypeUtils()
-	 */
-	static Optional<DeclaredType> findDeclaredType(@Nonnull ProcessingEnvironment processingEnvironment, @Nonnull final Class<?> clazz,
-			@Nonnull final TypeMirror... typeArgs) {
-		return findDeclaredType(processingEnvironment.getElementUtils(), processingEnvironment.getTypeUtils(), clazz, typeArgs);
-	}
-
-	/**
-	 * Finds a returns a type corresponding to a class type element with an unbounded wildcard type parameter, if the type element is uniquely determinable in the
-	 * environment.
-	 * @implSpec This implementation delegates to {@link #findDeclaredType(Elements, Types, Class, TypeMirror...)} using the result of
-	 *           #getUnboundedWildcardType(Types).
-	 * @param elements The element utilities.
-	 * @param types The type utilities.
-	 * @param clazz The class for which a type element is to be found.
-	 * @return The type element for the class, which will not be present if no type element can be uniquely determined.
-	 * @see ProcessingEnvironment#getElementUtils()
-	 * @see Class#getCanonicalName()
-	 * @see Elements#getTypeElement(CharSequence)
-	 * @see Types#getDeclaredType(TypeElement, TypeMirror...)
-	 * @see #getUnboundedWildcardType(Types)
-	 */
-	static Optional<DeclaredType> findUnboundedWildcardDeclaredType(@Nonnull final Elements elements, @Nonnull final Types types, @Nonnull final Class<?> clazz) {
-		return findDeclaredType(elements, types, clazz, getUnboundedWildcardType(types));
-	}
-
-	/**
-	 * Finds a returns a type corresponding to a class type element with an unbounded wildcard type parameter, if the type element is uniquely determinable in the
-	 * environment.
-	 * @implSpec This implementation delegates to {@link #findUnboundedWildcardDeclaredType(Elements, Types, Class)}.
-	 * @param processingEnvironment The processing environment.
-	 * @param clazz The class for which a type element is to be found.
-	 * @return The type element for the class, which will not be present if no type element can be uniquely determined.
-	 * @see ProcessingEnvironment#getElementUtils()
-	 * @see Class#getCanonicalName()
-	 * @see Elements#getTypeElement(CharSequence)
-	 * @see Types#getDeclaredType(TypeElement, TypeMirror...)
-	 * @see ProcessingEnvironment#getElementUtils()
-	 * @see ProcessingEnvironment#getTypeUtils()
-	 */
-	static Optional<DeclaredType> findUnboundedWildcardDeclaredType(@Nonnull ProcessingEnvironment processingEnvironment, @Nonnull final Class<?> clazz) {
-		return findUnboundedWildcardDeclaredType(processingEnvironment.getElementUtils(), processingEnvironment.getTypeUtils(), clazz);
-	}
-
-	//### Types Utilities
-
-	/**
-	 * Returns a new unbounded wildcard type ({@code <?>}).
-	 * @implSpec This implementation delegates to {@link Types#getWildcardType(TypeMirror, TypeMirror)}, passing <code>null</code> for both bounds.
-	 * @return The new unbounded wildcard type.
-	 */
-	static WildcardType getUnboundedWildcardType(@Nonnull final Types types) {
-		return types.getWildcardType(null, null);
 	}
 
 }
