@@ -24,7 +24,6 @@ import static com.globalmentor.java.model.ModelTypes.*;
 import static com.globalmentor.util.stream.Streams.*;
 import static java.lang.System.*;
 import static java.nio.charset.StandardCharsets.*;
-import static java.util.stream.Collectors.*;
 import static javax.lang.model.util.ElementFilter.*;
 import static javax.tools.Diagnostic.Kind.*;
 import static javax.tools.StandardLocation.*;
@@ -33,11 +32,9 @@ import static org.zalando.fauxpas.FauxPas.*;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Stream;
 
 import javax.annotation.*;
 import javax.annotation.processing.*;
-import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
 import javax.lang.model.type.*;
 import javax.tools.FileObject;
@@ -52,13 +49,16 @@ import dev.flange.cloud.aws.*;
 
 /**
  * Annotation processor for Flange Cloud.
+ * <p>
+ * This annotation processor supports the following annotations:
+ * </p>
+ * <ul>
+ * <li>{@link CloudFunctionService}</li>
+ * <li>{@link ServiceConsumer}</li>
+ * </ul>
  * @author Garret Wilson
  */
 public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
-
-	/** The fully qualified class names representing annotation type supported by this processor. */
-	public static final Set<String> SUPPORTED_ANNOTATION_TYPES = Stream.of(CloudFunctionService.class, ServiceConsumer.class).map(Class::getName)
-			.collect(toUnmodifiableSet());
 
 	/**
 	 * The resource containing the AWS Lambda assembly descriptor.
@@ -80,22 +80,9 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 	 */
 	private static final String RESOURCE_SAM_INTRO = "aws/sam-intro.yaml";
 
-	/**
-	 * {@inheritDoc}
-	 * @implSpec This processor supports {@link #SUPPORTED_ANNOTATION_TYPES}.
-	 */
-	@Override
-	public Set<String> getSupportedAnnotationTypes() {
-		return SUPPORTED_ANNOTATION_TYPES;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 * @implSpec This processor supports the latest supported source version.
-	 */
-	@Override
-	public SourceVersion getSupportedSourceVersion() {
-		return SourceVersion.latestSupported();
+	/** Default constructor. */
+	public FlangeCloudAnnotationProcessor() {
+		super(Set.of(CloudFunctionService.class, ServiceConsumer.class));
 	}
 
 	private static final ClassName ABSTRACT_AWS_CLOUD_FUNCTION_API_STUB_CLASS_NAME = ClassName.get(AbstractAwsCloudFunctionApiStub.class);
