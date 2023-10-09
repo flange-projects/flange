@@ -24,5 +24,10 @@
 			<groupId>dev.flange</groupId>
 			<artifactId>flange-cloud</artifactId>
 		</dependency>
+
+		<dependency> <!-- TODO make pluggable -->
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-cloud-aws</artifactId>
+		</dependency>
 	</dependencies>
 </project>
