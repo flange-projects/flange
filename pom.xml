@@ -36,10 +36,12 @@
 	<modules>
 		<module>parent</module>
 		<module>flange</module>
+		<module>flange-application</module>
 		<module>flange-spring</module>
 		<module>flange-spring-simple-provider</module>
 		<module>build</module>
 		<module>cloud</module>
+		<module>cloud-application</module>
 		<module>cloud-aws</module>
 	</modules>
 
@@ -53,13 +55,7 @@
 
 			<dependency>
 				<groupId>dev.flange</groupId>
-				<artifactId>flange-spring</artifactId>
-				<version>0.1.0-SNAPSHOT</version>
-			</dependency>
-
-			<dependency>
-				<groupId>dev.flange</groupId>
-				<artifactId>flange-spring-simple-provider</artifactId>
+				<artifactId>flange-application</artifactId>
 				<version>0.1.0-SNAPSHOT</version>
 			</dependency>
 
@@ -77,7 +73,25 @@
 
 			<dependency>
 				<groupId>dev.flange</groupId>
+				<artifactId>flange-cloud-application</artifactId>
+				<version>0.1.0-SNAPSHOT</version>
+			</dependency>
+
+			<dependency>
+				<groupId>dev.flange</groupId>
 				<artifactId>flange-cloud-aws</artifactId>
+				<version>0.1.0-SNAPSHOT</version>
+			</dependency>
+
+			<dependency>
+				<groupId>dev.flange</groupId>
+				<artifactId>flange-spring</artifactId>
+				<version>0.1.0-SNAPSHOT</version>
+			</dependency>
+
+			<dependency>
+				<groupId>dev.flange</groupId>
+				<artifactId>flange-spring-simple-provider</artifactId>
 				<version>0.1.0-SNAPSHOT</version>
 			</dependency>
 		</dependencies>

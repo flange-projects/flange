@@ -9,25 +9,20 @@
 		<relativePath>../parent/pom.xml</relativePath>
 	</parent>
 
-	<artifactId>flange</artifactId>
+	<artifactId>flange-cloud-application</artifactId>
 
-	<name>Flange</name>
-	<description>Flange dependency registration and injection.</description>
+	<name>Flange Cloud Application</name>
+	<description>Support for a Flange Cloud aware application.</description>
 
 	<dependencies>
 		<dependency>
-			<groupId>io.csar</groupId>
-			<artifactId>csar</artifactId>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-application</artifactId>
 		</dependency>
 
 		<dependency>
-			<groupId>org.zalando</groupId>
-			<artifactId>faux-pas</artifactId>
-		</dependency>
-
-		<dependency>
-			<groupId>io.clogr</groupId>
-			<artifactId>clogr</artifactId>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-cloud</artifactId>
 		</dependency>
 	</dependencies>
 </project>
