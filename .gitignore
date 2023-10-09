@@ -1,3 +1,5 @@
+/aws-profile
+
 #Eclipse
 *.launch
 .buildpath
@@ -6,7 +8,6 @@
 .factorypath
 .project
 .settings/
-bin/
 
 #JetBrains
 *.iml
@@ -23,9 +24,7 @@ target/
 
 #NetBeans
 nbproject/private/
-build/
 nbbuild/
-dist/
 nbdist/
 .nb-gradle/
 nb-configuration.xml

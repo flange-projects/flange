@@ -9,15 +9,20 @@
 		<relativePath>../parent/pom.xml</relativePath>
 	</parent>
 
-	<artifactId>flange-example-cloud-faas</artifactId>
-	<packaging>pom</packaging>
+	<artifactId>flange-spring-simple-provider</artifactId>
 
-	<modules>
-		<module>service-api</module>
-		<module>service-impl</module>
-		<module>cli</module>
-	</modules>
+	<name>Flange Spring Simple Provider</name>
+	<description>A Csar provider for Flange backed by a Spring context for simple dependency management.</description>
 
-	<name>Flange Example: Cloud FaaS</name>
-	<description>Flange cloud example application illustrating Function as a Service support.</description>
+	<dependencies>
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange-spring</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context</artifactId>
+		</dependency>
+	</dependencies>
 </project>

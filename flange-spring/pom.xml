@@ -9,8 +9,21 @@
 		<relativePath>../parent/pom.xml</relativePath>
 	</parent>
 
-	<artifactId>flange-cloud</artifactId>
+	<artifactId>flange-spring</artifactId>
 
-	<name>Flange Cloud</name>
-	<description>Flange cloud definitions and API.</description>
+	<name>Flange Spring</name>
+	<description>Flange implementations backed by a Spring context</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context</artifactId>
+			<scope>provided</scope>
+		</dependency>
+	</dependencies>
 </project>
