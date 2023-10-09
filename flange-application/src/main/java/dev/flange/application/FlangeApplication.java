@@ -18,6 +18,8 @@ package dev.flange.application;
 
 import static dev.flange.Flange.*;
 
+import javax.annotation.*;
+
 import dev.flange.*;
 import io.clogr.*;
 
@@ -57,7 +59,7 @@ public interface FlangeApplication extends Runnable, Clogged, Flanged {
 	 *           </dl>
 	 * @param args application arguments.
 	 */
-	public static void configureFlangeFromArgs(final String[] args) {
+	public static void configureFlangeFromArgs(@Nonnull final String[] args) {
 		for(int i = 0; i < args.length - 1; i++) { //TODO detect configuration in `flange-config.*` as well
 			switch(args[i]) {
 				case CLI_PARAM_FLANGE_ENV -> {

@@ -16,6 +16,10 @@
 
 package dev.flange.cloud.application;
 
+import static dev.flange.Flange.*;
+
+import javax.annotation.*;
+
 import dev.flange.application.FlangeApplication;
 import dev.flange.cloud.aws.FlangePlatformAws;
 import io.clogr.Clogr;
@@ -46,7 +50,7 @@ public interface FlangeCloudApplication extends FlangeApplication {
 	 *           </dl>
 	 * @param args application arguments.
 	 */
-	public static void configureFlangeFromArgs(final String[] args) {
+	public static void configureFlangeFromArgs(@Nonnull final String[] args) {
 		FlangeApplication.configureFlangeFromArgs(args); //perform default Flange application configuration
 		for(int i = 0; i < args.length - 1; i++) { //TODO detect configuration in `flange-config.*` as well
 			switch(args[i]) {
@@ -57,6 +61,21 @@ public interface FlangeCloudApplication extends FlangeApplication {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Starts the application.
+	 * @implSpec This implementation configures Flange from arguments using {@link #configureFlangeFromArgs(String[])}, instantiates the application, and runs it
+	 *           by invoking {@link #start()}.
+	 * @param <A> The type of application to start.
+	 * @param applicationClass The class indicating the type of application to start.
+	 * @param args The application arguments.
+	 */
+	public static <A extends FlangeCloudApplication> void start(@Nonnull final Class<A> applicationClass, @Nonnull final String[] args) { //TODO refactor initialization into FlangeApplication and AbstractApplication
+		configureFlangeFromArgs(args);
+		getDependencyConcern().registerDependency(applicationClass);
+		final A application = getDependencyConcern().getDependencyInstanceByType(applicationClass);
+		application.start();
 	}
 
 }
