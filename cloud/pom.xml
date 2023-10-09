@@ -13,4 +13,11 @@
 
 	<name>Flange Cloud</name>
 	<description>Flange cloud definitions and API.</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>dev.flange</groupId>
+			<artifactId>flange</artifactId>
+		</dependency>
+	</dependencies>
 </project>

@@ -47,6 +47,12 @@ import io.csar.*;
  */
 public class Flange {
 
+	/** The configuration key for the Flange environment identifier. */
+	public static final String CONFIG_KEY_FLANGE_ENV = "flange.env";
+
+	/** The configuration key for the Flange platform identifier. */
+	public static final String CONFIG_KEY_FLANGE_PLATFORM = "flange.platform";
+
 	/**
 	 * Returns the default dependency concern.
 	 * @return The default dependency concern.

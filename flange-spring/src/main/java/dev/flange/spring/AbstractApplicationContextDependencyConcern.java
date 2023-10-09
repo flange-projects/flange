@@ -31,6 +31,7 @@ import dev.flange.*;
 
 /**
  * Abstract base class for implementing a dependency concern backed by a spring {@link ApplicationContext}.
+ * @implSpec Dependencies are autowired using constructor injection.
  * @param <AC> The type of Spring application context backing this dependency concern implementation.
  * @author Garret Wilson
  */
@@ -59,7 +60,7 @@ public abstract class AbstractApplicationContextDependencyConcern<AC extends App
 	public void registerDependency(final Class<?> dependencyClass) {
 		final GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
 		beanDefinition.setBeanClass(dependencyClass);
-		beanDefinition.setAutowireCandidate(true);
+		beanDefinition.setAutowireMode(GenericBeanDefinition.AUTOWIRE_CONSTRUCTOR);
 		try {
 			getBeanDefinitionRegistry().registerBeanDefinition(dependencyClass.getSimpleName(), beanDefinition);
 		} catch(final BeansException beansException) {
