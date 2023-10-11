@@ -16,13 +16,11 @@
 
 package dev.flange.cloud.aws;
 
-import static com.globalmentor.java.Conditions.*;
-
 import java.io.IOException;
 import java.lang.reflect.*;
 import java.util.Locale;
 
-import javax.annotation.Nonnull;
+import javax.annotation.*;
 
 import com.fasterxml.classmate.GenericType;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -42,6 +40,9 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
  * @author Garret Wilson
  */
 public class Marshalling {
+
+	/** Original object mapper for internal conversions. */
+	private static final ObjectMapper OBJECT_MAPPER;
 
 	/** Reader for JSON deserialization. */
 	public static final ObjectReader JSON_READER;
@@ -89,40 +90,85 @@ public class Marshalling {
 	}
 
 	static {
-		final ObjectMapper objectMapper = createJsonObjectMapper();
-		JSON_READER = objectMapper.reader();
-		JSON_WRITER = objectMapper.writer();
+		OBJECT_MAPPER = createJsonObjectMapper();
+		JSON_READER = OBJECT_MAPPER.reader();
+		JSON_WRITER = OBJECT_MAPPER.writer();
 	}
 
 	/**
-	 * Provides a reader configured to data bind into a specified type.
+	 * Converts a value (which may be a node in a map of already parsed JSON) to the indicated type.
+	 * @param <T> The expected type.
+	 * @param fromValue The existing value.
+	 * @param toValueType The destination type, which may be a {@link Class} or even some other type that provides further generics information, such as
+	 *          {@link ParameterizedType}.
+	 * @return The converted value.
+	 * @throws IllegalArgumentException if the argument cannot be converted.
+	 */
+	public static <T> T convertValue(final Object fromValue, final Type toValueType) throws IllegalArgumentException {
+		return OBJECT_MAPPER.convertValue(fromValue, OBJECT_MAPPER.getTypeFactory().constructType(toValueType));
+	}
+
+	//	public static <T> T convertValue(Object fromValue, Class<T> toValueType)
+
+	/**
+	 * Provides a reader configured to data bind into a specified generic type.
 	 * @param genericType The ClassMate generic type holder.
 	 * @return A new reader for the specified generic type.
 	 * @throws IllegalArgumentException if the given type is not a direct subclass of {@link GenericType} providing a single generic type parameter.
 	 */
 	public static ObjectReader jsonReaderForType(@Nonnull final GenericType<?> genericType) {
-		return JSON_READER.forType(toJavaType(JSON_READER.getConfig().getTypeFactory(), genericType));
+		return JSON_READER.forType(typeTokenToJavaType(JSON_READER.getConfig().getTypeFactory(), genericType));
+	}
+
+	/**
+	 * Provides a reader configured to data bind into a specified type.
+	 * @apiNote This method replaces a {@link ObjectReader#withType(Type)} which has been deprecated with no replacement; see
+	 *          <a href="https://github.com/FasterXML/jackson-databind/issues/4153"><code>jacksond-databind</code> #4153</a>.
+	 * @param type The type, possibly with generic information.
+	 * @return A new reader for the specified type.
+	 */
+	public static ObjectReader jsonReaderForType(@Nonnull final Type type) {
+		return JSON_READER.forType(JSON_READER.getConfig().getTypeFactory().constructType(type));
 	}
 
 	/**
 	 * Converts a ClassMate "generic type" to a Jackson "Java type" using the supplied type factory.
 	 * @param typeFactory The type factory for creating Jackson types.
-	 * @param genericType The ClassMate generic type holder.
+	 * @param typeToken The type token: either a {@link Class}; a super type token such as {@code com.fasterxml.classmate.GenericType<T>}, Spring
+	 *          {@code org.springframework.core.ParameterizedTypeReference<T>}, Guava {@code com.google.common.reflect.TypeToken<T>}; or some other {@link Type}.
 	 * @return A Jackson Java type token instance.
 	 * @see <a href="https://github.com/FasterXML/java-classmate/issues/69">Convert GenericType or ResolvedType to JavaType #69</a>
-	 * @throws IllegalArgumentException if the given type is not a direct subclass of {@link GenericType} providing a single generic type parameter.
+	 * @see <a href="https://gafter.blogspot.com/2006/12/super-type-tokens.html">Super Type Tokens</a>
+	 * @throws IllegalArgumentException if the given object is not a {@link Class}; or a direct subclass of a class providing a single generic type parameter.
 	 */
-	public static JavaType toJavaType(@Nonnull final TypeFactory typeFactory, @Nonnull final GenericType<?> genericType) {
-		final Type genericTypeSubclassSuperClass = genericType.getClass().getGenericSuperclass();
-		if(genericTypeSubclassSuperClass instanceof ParameterizedType parameterizedType) {
-			checkArgument(GenericType.class.equals(parameterizedType.getRawType()), "Type token must be immediate subclass of `%s`.",
-					GenericType.class.getSimpleName());
+	public static JavaType typeTokenToJavaType(@Nonnull final TypeFactory typeFactory, @Nonnull final Object typeToken) {
+		return typeFactory.constructType(typeTokenToType(typeToken));
+	}
+
+	/**
+	 * Returns a type represented by a type token: either a {@link Class}; or a direct subclass of some parameterized type (a <dfn>super type token</dfn>), where
+	 * the super class parameterized type represents the type; some other {@link Type}. If the given type token is a {@link Type} that is not a super type token,
+	 * the object itself will be returned.
+	 * @param typeToken The type token: either a {@link Class}; or a super type token such as {@code com.fasterxml.classmate.GenericType<T>}, Spring
+	 *          {@code org.springframework.core.ParameterizedTypeReference<T>}, Guava {@code com.google.common.reflect.TypeToken<T>}; or some other {@link Type}.
+	 * @return The type represented by the type token.
+	 * @see <a href="https://gafter.blogspot.com/2006/12/super-type-tokens.html">Super Type Tokens</a>
+	 * @throws IllegalArgumentException if the given object is not a {@link Class}; or a direct subclass of a class providing a single generic type parameter.
+	 */
+	public static Type typeTokenToType(@Nonnull final Object typeToken) { //TODO move to PLOOP
+		//super type token (check first, because ClassMate `GenericType<T>` is also a `Type`)
+		final Type superTypeTokenSuperClass = typeToken.getClass().getGenericSuperclass();
+		if(superTypeTokenSuperClass instanceof ParameterizedType parameterizedType) {
 			final Type[] actualTypeArguments = parameterizedType.getActualTypeArguments();
 			if(actualTypeArguments.length == 1) {
-				return typeFactory.constructType(actualTypeArguments[0]);
+				return actualTypeArguments[0];
 			}
 		}
-		throw new IllegalArgumentException("Type token must provide a single generic type argument.");
+		//type
+		if(typeToken instanceof Type) { //types in general, if they are not super type tokens needing "unwrapping", can be returned directly  
+			return (Type)typeToken;
+		}
+		throw new IllegalArgumentException("Type token must be an instance of `Class`, or have a super class providing a single generic type argument.");
 	}
 
 }

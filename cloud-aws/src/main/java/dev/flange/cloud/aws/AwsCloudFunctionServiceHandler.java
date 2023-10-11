@@ -18,7 +18,9 @@ package dev.flange.cloud.aws;
 
 import static com.globalmentor.java.Conditions.*;
 import static com.globalmentor.java.Objects.*;
+import static com.globalmentor.util.stream.Streams.*;
 import static dev.flange.cloud.aws.Marshalling.*;
+import static java.util.Arrays.*;
 import static java.util.Objects.*;
 
 import java.io.*;
@@ -30,7 +32,6 @@ import java.util.stream.Stream;
 import javax.annotation.*;
 
 import com.amazonaws.services.lambda.runtime.*;
-import com.globalmentor.util.stream.Streams;
 
 import dev.flange.*;
 import io.clogr.Clogged;
@@ -73,7 +74,7 @@ public class AwsCloudFunctionServiceHandler<S> implements RequestStreamHandler, 
 		final Class<?> serviceClass = getService().getClass();
 		final Method method;
 		try {
-			method = declaredMethodsHavingName(serviceClass, methodName).collect(Streams.toOnly());
+			method = declaredMethodsHavingName(serviceClass, methodName).collect(toOnly());
 		} catch(final NoSuchElementException noSuchElementException) {
 			throw new IllegalArgumentException("No service `%s` method named `%s` found.".formatted(serviceClass.getName(), methodName));
 		} catch(final IllegalArgumentException illegalArgumentException) {
@@ -85,7 +86,10 @@ public class AwsCloudFunctionServiceHandler<S> implements RequestStreamHandler, 
 		checkArgument(methodReturnType.equals(Future.class) || methodReturnType.equals(CompletableFuture.class),
 				"Class `%s` method `%s` expected to have a `Future<?>` or `CompletableFuture<?>` return type; found `%s`.", serviceClass.getName(), methodName,
 				methodReturnType.getName());
-		final List<?> methodArgs = List.of(); //TODO parse method arguments
+		final List<Type> methodArgTypes = asList(method.getGenericParameterTypes()); //TODO add PLOOP convenience list method
+		final List<?> marshalledMethodArgs = Optional.ofNullable(inputs.get(PARAM_FLANGE_METHOD_ARGS)).flatMap(asInstance(List.class))
+				.orElseThrow(() -> new IllegalArgumentException("Missing input `%s` method arguments list.".formatted(PARAM_FLANGE_METHOD_ARGS)));
+		final List<?> methodArgs = unmarshalMethodArgs(marshalledMethodArgs, methodArgTypes);
 		final Object output;
 		try {
 			final Future<?> result;
@@ -127,12 +131,24 @@ public class AwsCloudFunctionServiceHandler<S> implements RequestStreamHandler, 
 		bufferedOutputStream.flush();
 	}
 
-	private Stream<Method> declaredMethodsHavingName(@Nonnull final Class<?> clazz, @Nonnull final String methodName) { //TODO move to PLOOP
+	/**
+	 * Unmarshals a list of arguments, already parsed into JSON default types, based upon actual argument types.
+	 * @implSpec This implementation calls {@link Marshalling#convertValue(Object, Type)}.
+	 * @param marshalledArgs The arguments parsed into a map of general objects, lists, and numbers.
+	 * @param argTypes The types of arguments as provided by a method, potentially each including generics information, such as those supplied by
+	 *          {@link Method#getGenericParameterTypes()}.
+	 * @return A list of unmarshalled argument values to be passed to a method with the given argument types.
+	 */
+	static List<?> unmarshalMethodArgs(@Nonnull final List<?> marshalledArgs, @Nonnull final List<Type> argTypes) {
+		return zip(marshalledArgs.stream(), argTypes.stream(), (marshalledArg, argType) -> convertValue(marshalledArg, argType)).toList();
+	}
+
+	static Stream<Method> declaredMethodsHavingName(@Nonnull final Class<?> clazz, @Nonnull final String methodName) { //TODO move to PLOOP
 		requireNonNull(methodName);
 		return declaredMethods(clazz).filter(method -> method.getName().equals(methodName));
 	}
 
-	private Stream<Method> declaredMethods(@Nonnull final Class<?> clazz) { //TODO move to PLOOP
+	static Stream<Method> declaredMethods(@Nonnull final Class<?> clazz) { //TODO move to PLOOP
 		return Stream.of(clazz.getDeclaredMethods());
 	}
 
