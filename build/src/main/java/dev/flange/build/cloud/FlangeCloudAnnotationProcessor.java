@@ -86,7 +86,7 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 	}
 
 	private static final ClassName ABSTRACT_AWS_CLOUD_FUNCTION_API_STUB_CLASS_NAME = ClassName.get(AbstractAwsCloudFunctionApiStub.class);
-	private static final ClassName AWS_CLOUD_FUNCTION_SERVICE_HANDLER_CLASS_NAME = ClassName.get(AwsCloudFunctionServiceHandler.class);
+	private static final ClassName ABSTRACT_AWS_CLOUD_FUNCTION_SERVICE_HANDLER_CLASS_NAME = ClassName.get(AbstractAwsCloudFunctionServiceHandler.class);
 
 	private static final String AWS_CLOUD_FUNCTION_STUB_CLASS_NAME_SUFFIX = "_FlangeAwsLambdaStub";
 	private static final String AWS_CLOUD_FUNCTION_SKELETON_CLASS_NAME_SUFFIX = "_FlangeAwsLambdaSkeleton";
@@ -119,7 +119,7 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 					cloudFunctionServiceImplClassNames.add(serviceImplClassName);
 					final ClassName serviceApiClassName = foundCloudFunctionApiAnnotatedInterfaceType.map(DeclaredType::asElement).flatMap(asInstance(TypeElement.class))
 							.map(ClassName::get).orElse(serviceImplClassName); //if we can't find an API interface, use the service class name itself, although other components can't find it
-					final ClassName awsLambdaServiceHandlerClassName = generateAwsCloudFunctionServiceSkeletonClass(serviceImplTypeElement);
+					final ClassName awsLambdaServiceHandlerClassName = generateAwsCloudFunctionServiceSkeletonClass(serviceApiClassName, serviceImplTypeElement);
 					awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames.put(serviceApiClassName,
 							Map.entry(serviceImplClassName, awsLambdaServiceHandlerClassName));
 					generateCloudFunctionServiceAwsLambdaAssemblyDescriptor(serviceImplTypeElement);
@@ -229,23 +229,25 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 
 	/**
 	 * Generates the AWS Lambda skeleton class for a FaaS service implementation.
+	 * @param serviceApiClassName The name of the class representing the service API; typically the interface the service implementation implements.
 	 * @param serviceImplTypeElement The element representing the implementation of the FaaS service to be invoked by the skeleton.
 	 * @throws IOException if there is an I/O error writing the class.
 	 * @return The class name of the generated skeleton class.
 	 */
-	protected ClassName generateAwsCloudFunctionServiceSkeletonClass(@Nonnull final TypeElement serviceImplTypeElement) throws IOException {
+	protected ClassName generateAwsCloudFunctionServiceSkeletonClass(@Nonnull final ClassName serviceApiClassName,
+			@Nonnull final TypeElement serviceImplTypeElement) throws IOException {
 		final ClassName serviceImplClassName = ClassName.get(serviceImplTypeElement);
 		final ClassName awsLambdaHandlerClassName = ClassName.get(serviceImplClassName.packageName(),
 				serviceImplClassName.simpleName() + AWS_CLOUD_FUNCTION_SKELETON_CLASS_NAME_SUFFIX);
-		final TypeName awsLambdaHandlerSuperClassName = ParameterizedTypeName.get(AWS_CLOUD_FUNCTION_SERVICE_HANDLER_CLASS_NAME, serviceImplClassName);
-		//TODO look at the implemented interfaces to determine the API name to use, not the implementation
-		//`public final class MyServiceImpl_FlangeLambdaHandler …`
+		final TypeName awsLambdaHandlerSuperClassName = ParameterizedTypeName.get(ABSTRACT_AWS_CLOUD_FUNCTION_SERVICE_HANDLER_CLASS_NAME, serviceApiClassName,
+				serviceImplClassName);
+		//`public final class MyServiceImpl_FlangeLambdaHandler extends AbstractAwsCloudFunctionServiceHandler …`
 		final TypeSpec awsLambdaHandlerClassSpec = TypeSpec.classBuilder(awsLambdaHandlerClassName).addOriginatingElement(serviceImplTypeElement) //
 				.addModifiers(Modifier.PUBLIC, Modifier.FINAL).superclass(awsLambdaHandlerSuperClassName) //
-				.addJavadoc("AWS Lambda handler skeleton for {@link $T}.", serviceImplClassName) //
+				.addJavadoc("AWS Lambda handler skeleton for {@link $T} service implementation {@link $T}.", serviceApiClassName, serviceImplClassName) //
 				.addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC) //constructor
 						.addJavadoc("Constructor.") //
-						.addStatement("super($T.class)", serviceImplClassName).build())
+						.addStatement("super($T.class, $T.class)", serviceApiClassName, serviceImplClassName).build())
 				.build();
 		final JavaFile awsLambdaHandlerClassJavaFile = JavaFile.builder(serviceImplClassName.packageName(), awsLambdaHandlerClassSpec) //
 				.addFileComment("""

@@ -16,7 +16,7 @@
 
 package dev.flange.cloud.aws;
 
-import static dev.flange.cloud.aws.AwsCloudFunctionServiceHandler.*;
+import static dev.flange.cloud.aws.AbstractAwsCloudFunctionServiceHandler.*;
 import static dev.flange.cloud.aws.Marshalling.*;
 import static java.util.Arrays.*;
 import static java.util.Collections.*;
@@ -35,22 +35,22 @@ import com.globalmentor.util.stream.Streams;
 import dev.flange.cloud.aws.MarshallingTest.FooBar;
 
 /**
- * Tests of {@link AwsCloudFunctionServiceHandler}.
+ * Tests of {@link AbstractAwsCloudFunctionServiceHandler}.
  * @author Garret Wilson
  */
-public class AwsCloudFunctionServiceHandlerTest {
+public class AbstractAwsCloudFunctionServiceHandlerTest {
 
-	/** @see AwsCloudFunctionServiceHandler#unmarshalMethodArgs(List, List) */
+	/** @see AbstractAwsCloudFunctionServiceHandler#unmarshalMethodArgs(List, List) */
 	@Test
 	void testUnmarshalMethodArgs() {
-		assertThat("no arguments", AwsCloudFunctionServiceHandler.unmarshalMethodArgs(List.of(), List.of()), is(emptyList()));
+		assertThat("no arguments", AbstractAwsCloudFunctionServiceHandler.unmarshalMethodArgs(List.of(), List.of()), is(emptyList()));
 		assertThat("manual argument list",
-				AwsCloudFunctionServiceHandler.unmarshalMethodArgs(List.of("en", Map.of("foo", Map.of("value", 123), "bar", "foobar"), "en"),
+				AbstractAwsCloudFunctionServiceHandler.unmarshalMethodArgs(List.of("en", Map.of("foo", Map.of("value", 123), "bar", "foobar"), "en"),
 						List.of(String.class, typeTokenToType(new TypeReference<FooBar>() {}), Locale.class)),
 				is(List.of("en", new FooBar(new FooBar.Foo(123), "foobar"), Locale.forLanguageTag("en"))));
-		final Method fooApiBarMethod = declaredMethodsHavingName(Foo.class, "bar").collect(Streams.toOnly()); //TODO switch to using the API methods once the implementation is updated
+		final Method fooApiBarMethod = declaredMethodsHavingName(FooApi.class, "bar").collect(Streams.toOnly());
 		assertThat("method argument list",
-				AwsCloudFunctionServiceHandler.unmarshalMethodArgs(List.of(List.of("en", "fr"), 123, Map.of("foo", Map.of("value", 123), "bar", "foobar")),
+				AbstractAwsCloudFunctionServiceHandler.unmarshalMethodArgs(List.of(List.of("en", "fr"), 123, Map.of("foo", Map.of("value", 123), "bar", "foobar")),
 						asList(fooApiBarMethod.getGenericParameterTypes())),
 				is(List.of(List.of(Locale.ENGLISH, Locale.FRENCH), 123L, new FooBar(new FooBar.Foo(123), "foobar"))));
 	}
@@ -59,6 +59,7 @@ public class AwsCloudFunctionServiceHandlerTest {
 		public Set<Instant> bar(List<Locale> locales, long count, FooBar foobar);
 	}
 
+	@SuppressWarnings("unused")
 	private static class Foo implements FooApi {
 		@Override
 		public Set<Instant> bar(List<Locale> locales, long count, FooBar foobar) {
