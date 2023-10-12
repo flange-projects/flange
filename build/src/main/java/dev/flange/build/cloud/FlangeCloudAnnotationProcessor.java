@@ -149,6 +149,7 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 				}
 			}
 			if(roundEnvironment.processingOver()) {
+				//local dependencies: generated skeleton(s)
 				if(!cloudFunctionServiceImplClassNames.isEmpty()) {
 					generateFlangeDependenciesList(DEPENDENCIES_LIST_FILENAME, cloudFunctionServiceImplClassNames);
 				}
@@ -156,6 +157,7 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 					generateAwsSamTemplate(awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames);
 					generateAwsCloudFunctionServiceLog4jConfigFile();
 				}
+				//dependencies to other services: stub(s)
 				//TODO consider generating the first implementation during rounds if no others have been generated (see https://stackoverflow.com/q/27886169 for warning), and maybe checking current dependency list, if any, to support incremental compilation
 				if(!consumerTypeElementsByCloudFunctionApiTypeElement.isEmpty()) {
 					final Set<ClassName> awsCloudFunctionStubClassNames = new HashSet<>();
@@ -358,7 +360,10 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 					writer.write("            !Sub \"flange-${Env}:StagingBucketName\"%n".formatted());
 					writer.write("        Key: !Sub \"%s-aws-lambda.zip\"%n".formatted(serviceImplSkeletonClassNameEntry.getKey().simpleName())); //TODO later interpolate version 
 					writer.write("      Handler: %s::%s%n".formatted(serviceImplSkeletonClassNameEntry.getValue().canonicalName(), "handleRequest")); //TODO use constant
-					//TODO add environment variable for active profiles
+					writer.write("      Environment:%n".formatted());
+					writer.write("        Variables:%n".formatted());
+					writer.write("          FLANGE_PLATFORM: %s".formatted(FlangePlatformAws.ID));
+					//TODO add environment variable for active profile
 				}));
 			}
 		}

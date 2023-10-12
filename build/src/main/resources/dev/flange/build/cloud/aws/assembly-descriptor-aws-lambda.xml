@@ -36,4 +36,14 @@
 			<destName>log4j2.xml</destName>
 		</file>
 	</files>
+
+	<fileSets>
+		<fileSet>
+			<directory>${project.build.directory}/generated-sources/annotations</directory>
+			<includes>
+				<include>flange-dependencies_platform-aws.lst</include> <!-- optional; only present if this AWS Lambda itself has dependencies -->
+			</includes>
+			<outputDirectory>/</outputDirectory>
+		</fileSet>
+	</fileSets>
 </assembly>
