@@ -114,7 +114,7 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 			} catch(final IllegalAccessException illegalAccessException) {
 				throw new IllegalStateException("Unable to access class `%s` method `%s`.".formatted(getService().getClass().getName(), methodName)); //TODO improve
 			} catch(final IllegalArgumentException illegalArgumentException) {
-				throw illegalArgumentException; //TODO determine best approach
+				throw illegalArgumentException; //TODO determine best approach; this should probably be caught and marshalled back to the caller
 			}
 			output = result.get(); //TODO use timeout with `get(long timeout, TimeUnit unit)` 
 		} catch(final CancellationException cancellationException) {
@@ -128,7 +128,7 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 			if(cause instanceof IOException ioException) { //decide if we want to throw or wrap IOException; should it be distinguished from an Lambda IOException?
 				throw ioException;
 			} else if(cause instanceof RuntimeException runtimeException) {
-				throw runtimeException;
+				throw runtimeException; //TODO improve; many of these exceptions should be marshalled back to the caller
 			}
 			throw new IllegalStateException("Unrecognized exception type `%s`.".formatted(cause.getClass().getName())); //TODO improve
 		}

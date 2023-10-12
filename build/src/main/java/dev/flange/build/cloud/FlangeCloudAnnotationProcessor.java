@@ -24,6 +24,7 @@ import static com.globalmentor.java.model.ModelTypes.*;
 import static com.globalmentor.util.stream.Streams.*;
 import static java.lang.System.*;
 import static java.nio.charset.StandardCharsets.*;
+import static java.util.stream.Collectors.*;
 import static javax.lang.model.util.ElementFilter.*;
 import static javax.tools.Diagnostic.Kind.*;
 import static javax.tools.StandardLocation.*;
@@ -209,7 +210,10 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 			)) {
 				final TypeMirror typeArgument = getOnly(returnDeclaredType.getTypeArguments(), IllegalStateException::new); //CompletableFuture<?> is expected to only have one type argument
 				final MethodSpec.Builder methodSpecBuilder = MethodSpec.overriding(methodElement); //TODO comment
-				methodSpecBuilder.addStatement("return invokeAsync(new $T<$L>(){}, $S)", GenericType.class, typeArgument, methodName); //TODO finish; add parameters
+				final String argsAsSuffix = !methodSpecBuilder.parameters.isEmpty()
+						? methodSpecBuilder.parameters.stream().map(param -> param.name).collect(joining(", ", ", ", "")) //`, …`
+						: ""; //if there are no args, don't include any suffix, not even a comma
+				methodSpecBuilder.addStatement("return invokeAsync(new $T<$L>(){}, $S$L)", GenericType.class, typeArgument, methodName, argsAsSuffix);
 				lambdaStubClassSpecBuilder.addMethod(methodSpecBuilder.build());
 			} else {
 				getProcessingEnvironment().getMessager().printMessage(ERROR,
