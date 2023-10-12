@@ -366,7 +366,8 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 					writer.write("      Handler: %s::%s%n".formatted(serviceImplSkeletonClassNameEntry.getValue().canonicalName(), "handleRequest")); //TODO use constant
 					writer.write("      Environment:%n".formatted());
 					writer.write("        Variables:%n".formatted());
-					writer.write("          FLANGE_PLATFORM: %s".formatted(FlangePlatformAws.ID));
+					writer.write("          FLANGE_PLATFORM: %s%n".formatted(FlangePlatformAws.ID));
+					writer.write("          FLANGE_ENV: !Ref Env%n".formatted()); //TODO rename to FlangeEnv; use constant
 					//TODO add environment variable for active profile
 				}));
 			}
