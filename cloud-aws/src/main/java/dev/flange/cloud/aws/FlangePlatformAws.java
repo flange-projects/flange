@@ -38,4 +38,19 @@ public class FlangePlatformAws {
 	 */
 	public static final String CONFIG_KEY_FLANGE_AWS_PROFILE = "aws.profile";
 
+	/**
+	 * The CloudFormation parameter for the token identifying the deployment environment, such as <code>"dev"</code>, <code>"dev3"</code>, or
+	 * <code>"dev-jdoe"</code>.
+	 */
+	public static final String CLOUDFORMATION_PARAMETER_FLANGE_ENV = "FlangeEnv";
+
+	/**
+	 * The CloudFormation parameter for the deployment stage, such as <code>"dev"</code>, <code>"qa"</code>, or <code>"prod"</code>; essentially a category of
+	 * environment.
+	 */
+	public static final String CLOUDFORMATION_PARAMETER_FLANGE_STAGE = "FlangeStage";
+
+	/** The CloudFormation parameter for the comma-separated list of active profiles, such as <code>"dev,test"</code>. */
+	public static final String CLOUDFORMATION_PARAMETER_FLANGE_PROFILES_ACTIVE = "FlangeProfilesActive";
+
 }

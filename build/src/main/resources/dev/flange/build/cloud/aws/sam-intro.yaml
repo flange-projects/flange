@@ -8,18 +8,18 @@ Description:
 
 # ## Imports
 #
-# * `flange-${Env}:StagingBucketName`
+# * `flange-${FlangeEnv}:StagingBucketName`
 
 Parameters:
-  Env:
+  FlangeEnv:
     Description: The token identifying the deployment environment, such as "dev", "dev3", or "dev-jdoe".
     Type: String
     AllowedPattern: '\w[\w-]*'
-    ConstraintDescription: The development environment identifier must only use word characters and dashes.
+    ConstraintDescription: The deployment environment identifier must only use word characters and dashes.
 
 Globals:
   Function:
     Runtime: java17
     Architectures: [x86_64]
     MemorySize: 800
-    Timeout: 4 #4 s
+    Timeout: 8 #8 s

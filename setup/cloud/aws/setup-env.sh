@@ -6,22 +6,22 @@ awsProfileFile=aws-profile #optional file, relative to working directory; contai
 
 usage() {
   echo 'Sets up the infrastructure for an environment such as dev or prod.' >&2
-  echo 'Usage: setup-env <env> <cidr-block-16-prefix> [--stage {dev|qa|prod}] [--active-profiles <profiles>]' >&2
-  echo 'Example: setup-env dev 10.1 --active-profiles dev,test-data' >&2
-  echo 'Example: setup-env prod 10.0 --stage prod --active-profiles prod,example-data' >&2
+  echo 'Usage: setup-env <env> <cidr-block-16-prefix> [--stage {dev|qa|prod}] [--profiles-active <profiles>]' >&2
+  echo 'Example: setup-env dev 10.1 --profiles-active dev,test-data' >&2
+  echo 'Example: setup-env prod 10.0 --stage prod --profiles-active prod,example-data' >&2
   echo 'The stage may determine special behavior of the deployed stack; in particular `prod` may retain resources and/or prevent resources from easily being deleted.' >&2
   echo 'The stage defaults to `dev` unless the environment name is `prod`, in which case the stage defaults to `prod`.' >&2
   echo 'If no active profiles are specified, appropriate defaults will be provided based upon the determined stage.' >&2
   echo 'The AWS profile specified in the `aws-profile` file will be used, if present.' >&2
-  echo 'Note: Stack name will be in the form `flange-${env}`.' >&2
+  echo 'Note: Stack name will be in the form `flange-<env>`.' >&2
 }
 
 args=()
 stage=""
-activeProfiles=""
+profilesActive=""
 while (( $# > 0 )); do
   case "$1" in
-    --active-profiles) activeProfiles="$2"; shift; shift;;
+    --profiles-active) profilesActive="$2"; shift; shift;;
     --stage) stage="$2"; shift; shift;;
     --help) usage; exit 0;;
     --) shift; while (( $# > 0 )); do args+=("$1"); shift; done; break;;
@@ -49,25 +49,33 @@ if [[ -z $stage ]]; then
   fi
 fi
 
-if [[ -z $activeProfiles ]]; then
+if [[ -z $profilesActive ]]; then
   case $stage in
-    dev) activeProfiles=dev ;;
-    qa) activeProfiles=qa ;;
-    prod) activeProfiles=prod ;;
+    dev) profilesActive=dev ;;
+    qa) profilesActive=qa ;;
+    prod) profilesActive=prod ;;
   esac
 fi
 
-echo "Creating environment $(tput bold)$env$(tput sgr0) ..."
-echo 
+if [[ -f $awsProfileFile ]]; then
+  awsProfile="$(< $awsProfileFile)"
+  awsProfileOption="--profile $awsProfile"
+else
+  awsProfileOption=""
+fi
+
+echo "Setting up environment $(tput bold)$env$(tput sgr0) ..."
+echo
 echo "Stage: $stage"
-echo "Active profiles: $activeProfiles"
+echo "Active profiles: $profilesActive"
+if [[ -n $awsProfile ]]; then
+  echo "AWS Profile: $awsProfile"
+fi
 
-
-if [[ -f $awsProfileFile ]]; then awsProfileOption="--profile $(< $awsProfileFile)"; else awsProfileOption=""; fi
 stackName=flange-$env
 aws cloudformation deploy \
     $awsProfileOption \
     --stack-name $stackName \
     --template-file $SCRIPT_DIR/env.cloudformation.yaml \
     --capabilities CAPABILITY_NAMED_IAM \
-    --parameter-overrides Env=$env Stage=$stage VpcCidrBlock16Prefix=$vpcCidrBlock16Prefix ActiveProfiles=$activeProfiles
+    --parameter-overrides FlangeEnv=$env FlangeStage=$stage FlangeProfilesActive=$profilesActive VpcCidrBlock16Prefix=$vpcCidrBlock16Prefix
