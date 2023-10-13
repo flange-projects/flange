@@ -13,7 +13,7 @@ usage() {
   echo 'Usage: flange cloud deploy <env> [--dry-run]' >&2
   echo 'Example: flange cloud deploy' >&2
   echo 'The AWS profile specified in the `aws-profile` file will be used, if present.' >&2
-  echo 'Depends on the `flange-${env}` CloudFormation stack.' >&2
+  echo 'Depends on the `flange-<env>` CloudFormation stack.' >&2
 }
 
 args=()
@@ -46,7 +46,12 @@ command=${args[0]}
 
 # TODO check for AWS profile if `--platform aws` is indicated
 awsProfileFile=aws-profile #optional file, relative to working directory; contains name of AWS profile to use
-if [[ -f $awsProfileFile ]]; then awsProfile=$(< $awsProfileFile) awsProfileOption="--profile $awsProfile"; else awsProfile="" awsProfileOption=""; fi
+if [[ -f $awsProfileFile ]]; then
+  awsProfile="$(< $awsProfileFile)"
+  awsProfileOption="--profile $awsProfile"
+else
+  awsProfileOption=""
+fi
 
 ## `flange cloud`
 
@@ -79,6 +84,10 @@ cloudDeploy() {
 
   env=${args[2]}
   echo "Deploying projects to $(tput bold)$env$(tput sgr0) environment ..."
+  if [[ -n $awsProfile ]]; then
+    echo
+    echo "AWS Profile: $awsProfile"
+  fi
   envStackName=flange-$env
   stagingBucketName=$(aws cloudformation describe-stacks $awsProfileOption --stack-name $envStackName --query 'Stacks[0].Outputs[?OutputKey==`StagingBucketName`].OutputValue' --output text) || return
   cloudDeployTraverse .
@@ -117,7 +126,7 @@ cloudDeployTraverse() {
             --stack-name $stackName \
             --s3-bucket $stagingBucketName \
             --capabilities CAPABILITY_NAMED_IAM \
-            --parameter-overrides Env=$env
+            --parameter-overrides FlangeEnv=$env
       fi
     fi
 

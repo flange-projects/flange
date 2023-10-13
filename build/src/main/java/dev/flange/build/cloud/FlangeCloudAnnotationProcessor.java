@@ -22,6 +22,7 @@ import static com.globalmentor.java.Objects.*;
 import static com.globalmentor.java.model.ModelElements.*;
 import static com.globalmentor.java.model.ModelTypes.*;
 import static com.globalmentor.util.stream.Streams.*;
+import static dev.flange.cloud.aws.FlangePlatformAws.*;
 import static java.lang.System.*;
 import static java.nio.charset.StandardCharsets.*;
 import static java.util.stream.Collectors.*;
@@ -350,7 +351,7 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 	 * @return A reference, suitable for placing in a CloudFormation template, to the AWS Lambda function representing the indicated service API.
 	 */
 	private static String awsCloudFormationServiceApiFunctionNameReference(@Nonnull final ClassName serviceApiClassName) {
-		return "!Sub \"flange-${Env}-%s\"".formatted(serviceApiClassName.simpleName()); //TODO consider appending short hash of fully-qualified package+class to prevent clashes
+		return "!Sub \"flange-${FlangeEnv}-%s\"".formatted(serviceApiClassName.simpleName()); //TODO consider appending short hash of fully-qualified package+class to prevent clashes
 	}
 
 	/**
@@ -387,7 +388,7 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 					writer.write("      CodeUri:%n".formatted());
 					writer.write("        Bucket:%n".formatted());
 					writer.write("          Fn::ImportValue:%n".formatted());
-					writer.write("            !Sub \"flange-${Env}:StagingBucketName\"%n".formatted());
+					writer.write("            !Sub \"flange-${FlangeEnv}:StagingBucketName\"%n".formatted()); //TODO use constant
 					writer.write("        Key: !Sub \"%s-aws-lambda.zip\"%n".formatted(serviceImplClassName.simpleName())); //TODO later interpolate version 
 					writer.write("      Handler: %s::%s%n".formatted(serviceSkeletonClassName.canonicalName(), "handleRequest")); //TODO use constant
 					//see if this service implementation itself depends on other cloud function APIs; if so, we'll need to add permissions
@@ -401,9 +402,11 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 					}
 					writer.write("      Environment:%n".formatted());
 					writer.write("        Variables:%n".formatted());
-					writer.write("          FLANGE_PLATFORM: %s%n".formatted(FlangePlatformAws.ID));
-					writer.write("          FLANGE_ENV: !Ref Env%n".formatted()); //TODO rename to FlangeEnv; use constant
-					//TODO add environment variable for active profile
+					writer.write("          FLANGE_PLATFORM: %s%n".formatted(FlangePlatformAws.ID)); //TODO use constant
+					writer.write("          FLANGE_ENV: !Ref %s%n".formatted(CLOUDFORMATION_PARAMETER_FLANGE_ENV)); //TODO use constant
+					writer.write("          FLANGE_PROFILES_ACTIVE:%n".formatted());
+					writer.write("            Fn::ImportValue:%n".formatted());
+					writer.write("              !Sub \"flange-${FlangeEnv}:%s\"%n".formatted(CLOUDFORMATION_PARAMETER_FLANGE_PROFILES_ACTIVE));
 				}));
 			}
 		}
