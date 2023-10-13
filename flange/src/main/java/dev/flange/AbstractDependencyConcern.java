@@ -16,6 +16,7 @@
 
 package dev.flange;
 
+import static dev.flange.Flange.*;
 import static java.nio.charset.StandardCharsets.*;
 import static java.nio.file.Files.*;
 import static java.util.Objects.*;
@@ -162,8 +163,8 @@ public abstract class AbstractDependencyConcern<C> implements DependencyConcern 
 			types.forEach(type -> dependenciesByType.put(type, dependency));
 		});
 		//flange-dependencies_platform-xxx.lst
-		final Optional<String> foundPlatform = Optional.ofNullable(System.getProperty("flange.platform"))
-				.or(() -> Optional.ofNullable(System.getenv("FLANGE_PLATFORM"))); //TODO use constants; refactor
+		final Optional<String> foundPlatform = Optional.ofNullable(System.getProperty(CONFIG_KEY_FLANGE_PLATFORM))
+				.or(() -> Optional.ofNullable(System.getenv("FLANGE_PLATFORM"))); //TODO use constants; refactor to use Confound or common composite tokenization conversion
 		foundPlatform.ifPresent(throwingConsumer(platform -> {
 			dependenciesLoadedFromListResource(DEPENDENCIES_LIST_PLATFORM_RESOURCE_NAME_FORMAT.formatted(platform)).forEach(dependency -> { //TODO consolidate interpolation code
 				final Class<?>[] interfaces = dependency.getInterfaces();
@@ -198,7 +199,7 @@ public abstract class AbstractDependencyConcern<C> implements DependencyConcern 
 	 * @see #DEPENDENCY_FOR_NAME
 	 */
 	static Stream<Class<?>> dependenciesLoadedFromListResource(@Nonnull final String resourceName) throws IOException { //TODO switch to SequencedSet in Java 21
-		return loadDependenciesListResource(resourceName).stream().flatMap(Set::stream).map(DEPENDENCY_FOR_NAME);
+		return loadDependenciesListResource(resourceName).stream().flatMap(Set::stream).map(DEPENDENCY_FOR_NAME); //TODO decide what to do if a class cannot be loaded; maybe a platform-specific list overrides a dependency that has been removed for deployment to that platform—or should that step happen when creating the deployment artifact?
 	}
 
 	/** Convenience function for loading a dependency class by its class names, throwing a {@link DependencyException} if the class could not be loaded.> */

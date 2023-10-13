@@ -16,16 +16,18 @@
 
 package dev.flange.cloud.aws;
 
+import static dev.flange.cloud.aws.Marshalling.*;
 import static org.hamcrest.MatcherAssert.*;
 import static org.hamcrest.Matchers.*;
 
-import java.util.List;
+import java.io.IOException;
+import java.util.*;
 
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.classmate.GenericType;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 
 /**
@@ -34,7 +36,16 @@ import com.fasterxml.jackson.databind.type.TypeFactory;
  */
 public class MarshallingTest {
 
-	/** @see Marshalling#toJavaType(TypeFactory, GenericType) */
+	/**
+	 * Sanity test to ensure that Jackson parses basic types to a map as expected.
+	 * @see ObjectReader#readValue(String)
+	 */
+	@Test
+	void testJacksonReadToMap() throws IOException {
+		assertThat(JSON_READER.readValue("{\"foo\": [\"bar\", 123, true]}", Map.class), is(Map.of("foo", List.of("bar", 123, true))));
+	}
+
+	/** @see Marshalling#typeTokenToJavaType(TypeFactory, Object) */
 	@Test
 	void testGenericTypeToJavaType() {
 		@SuppressWarnings("serial")
@@ -42,7 +53,34 @@ public class MarshallingTest {
 		final TypeReference<?> typeReference = new TypeReference<List<String>>() {};
 		final TypeFactory typeFactory = TypeFactory.defaultInstance();
 		final JavaType javaTypeFromTypeReference = typeFactory.constructType(typeReference.getType());
-		assertThat(Marshalling.toJavaType(typeFactory, genericType), is(javaTypeFromTypeReference));
+		assertThat(Marshalling.typeTokenToJavaType(typeFactory, genericType), is(javaTypeFromTypeReference));
 	}
 
+	/** @see Marshalling#convertValue(Object, java.lang.reflect.Type) */
+	@Test
+	void testConvertValue() {
+		assertThat("`String` to `String`", Marshalling.convertValue("foo", String.class), is("foo"));
+		assertThat("`Integer` to `Integer`", Marshalling.convertValue(123, Integer.class), is(123));
+		assertThat("`Integer` to `int`", Marshalling.convertValue(123, int.class), is(123));
+		assertThat("`Integer` to `Long`", Marshalling.convertValue(123, Long.class), is(123L));
+		assertThat("`String` to `Locale`", Marshalling.convertValue("en-US", Locale.class), is(Locale.forLanguageTag("en-US")));
+		assertThat("`List<String>` to `List<String>`", Marshalling.convertValue(List.of("en", "fr"), typeTokenToType(new TypeReference<List<String>>() {})),
+				is(List.of("en", "fr")));
+		assertThat("`List<String>` to `List<Locale>`", Marshalling.convertValue(List.of("en", "fr"), typeTokenToType(new TypeReference<List<Locale>>() {})),
+				is(List.of(Locale.ENGLISH, Locale.FRENCH)));
+		assertThat("`List<Integer>` to `List<Integer>`", Marshalling.convertValue(List.of(1, 2, 3), typeTokenToType(new TypeReference<List<Integer>>() {})),
+				is(List.of(1, 2, 3)));
+		assertThat("`List<Integer>` to `List<Long>`", Marshalling.convertValue(List.of(1, 2, 3), typeTokenToType(new TypeReference<List<Long>>() {})),
+				is(List.of(1L, 2L, 3L)));
+		assertThat("`Map<String, Object>` to `Foobar`",
+				Marshalling.convertValue(Map.of("foo", Map.of("value", 123), "bar", "foobar"), typeTokenToType(new TypeReference<FooBar>() {})),
+				is(new FooBar(new FooBar.Foo(123), "foobar")));
+	}
+
+	public record FooBar(Foo foo, String bar) {
+
+		public record Foo(int value) {
+		}
+
+	}
 }

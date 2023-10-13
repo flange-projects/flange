@@ -19,9 +19,12 @@ package dev.flange.cloud.aws;
 /**
  * Definitions and utilities for the AWS platform.
  * @author Garret Wilson
- * @see <a href="https://aws.amazon.com/">AWS</a>
+ * @see <a href="https://aws.amazon.com/">Amazon Web Services</a>
  */
 public class FlangePlatformAws {
+
+	/** The Flange platform identifier for Amazon Web Services (AWS). */
+	public static final String ID = "aws";
 
 	/**
 	 * The configuration key for the Flange AWS platform profile identifier.

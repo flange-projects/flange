@@ -60,8 +60,8 @@ public abstract class AbstractAwsCloudFunctionApiStub implements Clogged, Confou
 		final Class<?> stubClass = getClass();
 		//TODO improve by caching the service API class and/or initializing the base class with the cloud function name, although this may pose problems with an environment name placeholder; keep in mind supporting other types of stubs in the future, e.g. for `@CloudFunctionApplication`, or `@CloudFunctions` representing a collection of functions
 		final Class<?> serviceApiClass = Stream.of(stubClass.getInterfaces()).filter(interfaceClass -> interfaceClass.isAnnotationPresent(CloudFunctionApi.class)) //TODO create utility method for finding annotated interface 
-				.reduce(toFindOnly(() -> new IllegalStateException(
-						"Multiple interfaces annotated with `@%s` not supported for stub class `%s`.".formatted(CloudFunctionApi.class.getSimpleName(), stubClass.getName()))))
+				.reduce(toFindOnly(() -> new IllegalStateException("Multiple interfaces annotated with `@%s` not supported for stub class `%s`."
+						.formatted(CloudFunctionApi.class.getSimpleName(), stubClass.getName()))))
 				.orElseThrow(() -> new IllegalStateException("Stub class `%s` does not seem to implement a service API, e.g. annotated with `@%s`."
 						.formatted(stubClass.getName(), CloudFunctionApi.class.getSimpleName())));
 		final String env = getConfiguration().getString("flange.env"); //TODO use constant

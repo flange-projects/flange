@@ -24,6 +24,7 @@ import static com.globalmentor.java.model.ModelTypes.*;
 import static com.globalmentor.util.stream.Streams.*;
 import static java.lang.System.*;
 import static java.nio.charset.StandardCharsets.*;
+import static java.util.stream.Collectors.*;
 import static javax.lang.model.util.ElementFilter.*;
 import static javax.tools.Diagnostic.Kind.*;
 import static javax.tools.StandardLocation.*;
@@ -86,7 +87,7 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 	}
 
 	private static final ClassName ABSTRACT_AWS_CLOUD_FUNCTION_API_STUB_CLASS_NAME = ClassName.get(AbstractAwsCloudFunctionApiStub.class);
-	private static final ClassName AWS_CLOUD_FUNCTION_SERVICE_HANDLER_CLASS_NAME = ClassName.get(AwsCloudFunctionServiceHandler.class);
+	private static final ClassName ABSTRACT_AWS_CLOUD_FUNCTION_SERVICE_HANDLER_CLASS_NAME = ClassName.get(AbstractAwsCloudFunctionServiceHandler.class);
 
 	private static final String AWS_CLOUD_FUNCTION_STUB_CLASS_NAME_SUFFIX = "_FlangeAwsLambdaStub";
 	private static final String AWS_CLOUD_FUNCTION_SKELETON_CLASS_NAME_SUFFIX = "_FlangeAwsLambdaSkeleton";
@@ -94,72 +95,87 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 	private static final String DEPENDENCIES_LIST_FILENAME = "flange-dependencies.lst"; //TODO reference constant from Flange
 	private static final String DEPENDENCIES_LIST_PLATFORM_AWS_FILENAME = "flange-dependencies_platform-aws.lst"; //TODO reference constant from Flange
 
+	/** The set of all collected classes representing cloud function service implementations. */
 	private final Set<ClassName> cloudFunctionServiceImplClassNames = new HashSet<>();
+
+	/** The mapping of service implementation class to skeleton implementation class for each service API. */
 	private final Map<ClassName, Map.Entry<ClassName, ClassName>> awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames = new HashMap<>();
-	private final Map<TypeElement, Set<TypeElement>> consumerTypeElementsByCloudFunctionApiTypeElement = new HashMap<>(); //TODO tidy
+
+	/** For each cloud function API, a set of all consumers that consume it. */
+	private final Map<TypeElement, Set<TypeElement>> consumerElementsByConsumedCloudFunctionApiElement = new HashMap<>();
+
+	/** For each consumer class, a set of all cloud function API classes that the consumer consumes. */
+	private final Map<ClassName, Set<ClassName>> consumedCloudFunctionApiClassNamesByConsumerClassName = new HashMap<>();
 
 	@Override
 	public boolean process(final Set<? extends TypeElement> annotations, final RoundEnvironment roundEnvironment) {
 		try {
 			//@CloudFunctionService
 			{
-				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(CloudFunctionService.class); //TODO create utility to get types and ensure there are no non-types
-				final Set<TypeElement> serviceImplTypeElements = typesIn(annotatedElements);
+				final Set<? extends Element> cloudFunctionServiceImplAnnotatedElements = roundEnvironment.getElementsAnnotatedWith(CloudFunctionService.class); //TODO create utility to get types and ensure there are no non-types
+				final Set<TypeElement> cloudFunctionServiceImplTypeElements = typesIn(cloudFunctionServiceImplAnnotatedElements);
 				//TODO raise error if there are non-type elements
-				for(final TypeElement serviceImplTypeElement : serviceImplTypeElements) {
-
-					final Optional<DeclaredType> foundCloudFunctionApiAnnotatedInterfaceType = elementInterfacesAnnotatedWith(serviceImplTypeElement,
+				for(final TypeElement cloudFunctionServiceImplTypeElement : cloudFunctionServiceImplTypeElements) {
+					final Optional<DeclaredType> foundCloudFunctionApiAnnotatedInterfaceType = elementInterfacesAnnotatedWith(cloudFunctionServiceImplTypeElement,
 							CloudFunctionApi.class).reduce(toFindOnly()); //TODO use improved reduction from JAVA-344 to provide an error if there are multiple interfaces found
 					if(!foundCloudFunctionApiAnnotatedInterfaceType.isPresent()) {
 						getProcessingEnvironment().getMessager().printMessage(WARNING,
 								"Service `%s` implements no interfaces annotated with `@%s`; generated cloud function may not be accessible from other system components."
-										.formatted(serviceImplTypeElement, CloudFunctionApi.class.getSimpleName()));
+										.formatted(cloudFunctionServiceImplTypeElement, CloudFunctionApi.class.getSimpleName()));
 					}
-					final ClassName serviceImplClassName = ClassName.get(serviceImplTypeElement);
-					cloudFunctionServiceImplClassNames.add(serviceImplClassName);
+					final ClassName cloudFunctionServiceImplClassName = ClassName.get(cloudFunctionServiceImplTypeElement);
+					cloudFunctionServiceImplClassNames.add(cloudFunctionServiceImplClassName);
 					final ClassName serviceApiClassName = foundCloudFunctionApiAnnotatedInterfaceType.map(DeclaredType::asElement).flatMap(asInstance(TypeElement.class))
-							.map(ClassName::get).orElse(serviceImplClassName); //if we can't find an API interface, use the service class name itself, although other components can't find it
-					final ClassName awsLambdaServiceHandlerClassName = generateAwsCloudFunctionServiceSkeletonClass(serviceImplTypeElement);
+							.map(ClassName::get).orElse(cloudFunctionServiceImplClassName); //if we can't find an API interface, use the service class name itself, although other components can't find it
+					final ClassName awsCloudFunctionServiceImplSkeletonClassName = generateAwsCloudFunctionServiceSkeletonClass(serviceApiClassName,
+							cloudFunctionServiceImplTypeElement);
 					awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames.put(serviceApiClassName,
-							Map.entry(serviceImplClassName, awsLambdaServiceHandlerClassName));
-					generateCloudFunctionServiceAwsLambdaAssemblyDescriptor(serviceImplTypeElement);
+							Map.entry(cloudFunctionServiceImplClassName, awsCloudFunctionServiceImplSkeletonClassName));
+					generateCloudFunctionServiceAwsLambdaAssemblyDescriptor(cloudFunctionServiceImplTypeElement);
 				}
 			}
 			//@ServiceClient
 			{
-				final Set<? extends Element> annotatedElements = roundEnvironment.getElementsAnnotatedWith(ServiceConsumer.class);
-				final Set<TypeElement> serviceTypeClientElements = typesIn(annotatedElements);
+				final Set<? extends Element> serviceConsumerAnnotatedElements = roundEnvironment.getElementsAnnotatedWith(ServiceConsumer.class);
+				final Set<TypeElement> serviceConsumerAnnotatedTypeElements = typesIn(serviceConsumerAnnotatedElements);
 				//TODO raise error if there are non-type elements
-				for(final TypeElement serviceClientTypeElement : serviceTypeClientElements) {
-					final AnnotationMirror serviceConsumerAnnotationMirror = findElementAnnotationMirrorForClass(serviceClientTypeElement, ServiceConsumer.class)
+				for(final TypeElement serviceConsumerTypeElement : serviceConsumerAnnotatedTypeElements) {
+					final AnnotationMirror serviceConsumerAnnotationMirror = findElementAnnotationMirrorForClass(serviceConsumerTypeElement, ServiceConsumer.class)
 							.orElseThrow(AssertionError::new); //we already know it has the annotation
+					final ClassName serviceConsumerClassName = ClassName.get(serviceConsumerTypeElement);
 					@SuppressWarnings("unchecked")
 					final List<? extends AnnotationValue> serviceClassAnnotationValues = findAnnotationValueElementValue(serviceConsumerAnnotationMirror)
 							.map(AnnotationValue::getValue).flatMap(asInstance(List.class)).orElseThrow(() -> new IllegalStateException(
-									"The `@%s` annotation of the element `%s` has no array value.".formatted(ServiceConsumer.class.getSimpleName(), serviceClientTypeElement)));
-					serviceClassAnnotationValues.stream().map(AnnotationValue::getValue).map(Object::toString) //consumed service class names
+									"The `@%s` annotation of the element `%s` has no array value.".formatted(ServiceConsumer.class.getSimpleName(), serviceConsumerTypeElement)));
+					serviceClassAnnotationValues.stream().map(AnnotationValue::getValue).map(Object::toString) //consumed service API class names
 							.map(className -> findTypeElementForCanonicalName(className) //consumed service type elements
 									.orElseThrow(() -> new IllegalStateException("Unable to find a single type element for service class `%s`.".formatted(className))))
-							.forEach(serviceTypeElement -> {
-								if(findElementAnnotationMirrorForClass(serviceTypeElement, CloudFunctionApi.class).isPresent()) {
-									consumerTypeElementsByCloudFunctionApiTypeElement.computeIfAbsent(serviceTypeElement, __ -> new LinkedHashSet<>())
-											.add(serviceClientTypeElement);
+							.forEach(consumedServiceApiTypeElement -> {
+								if(findElementAnnotationMirrorForClass(consumedServiceApiTypeElement, CloudFunctionApi.class).isPresent()) {
+									//mapping: consumer->(consumed API)
+									consumedCloudFunctionApiClassNamesByConsumerClassName.computeIfAbsent(serviceConsumerClassName, __ -> new LinkedHashSet<>())
+											.add(ClassName.get(consumedServiceApiTypeElement));
+									//reverse mapping: consumed API->(consumer)								
+									consumerElementsByConsumedCloudFunctionApiElement.computeIfAbsent(consumedServiceApiTypeElement, __ -> new LinkedHashSet<>())
+											.add(serviceConsumerTypeElement);
 								}
 							});
 				}
 			}
 			if(roundEnvironment.processingOver()) {
+				//local dependencies: generated skeleton(s)
 				if(!cloudFunctionServiceImplClassNames.isEmpty()) {
 					generateFlangeDependenciesList(DEPENDENCIES_LIST_FILENAME, cloudFunctionServiceImplClassNames);
 				}
 				if(!awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames.isEmpty()) {
-					generateAwsSamTemplate(awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames);
+					generateAwsSamTemplate(awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames, consumedCloudFunctionApiClassNamesByConsumerClassName);
 					generateAwsCloudFunctionServiceLog4jConfigFile();
 				}
+				//dependencies to other services: stub(s)
 				//TODO consider generating the first implementation during rounds if no others have been generated (see https://stackoverflow.com/q/27886169 for warning), and maybe checking current dependency list, if any, to support incremental compilation
-				if(!consumerTypeElementsByCloudFunctionApiTypeElement.isEmpty()) {
+				if(!consumerElementsByConsumedCloudFunctionApiElement.isEmpty()) {
 					final Set<ClassName> awsCloudFunctionStubClassNames = new HashSet<>();
-					consumerTypeElementsByCloudFunctionApiTypeElement.forEach(throwingBiConsumer((serviceApiTypeElement, serviceConsumerTypeElements) -> {
+					consumerElementsByConsumedCloudFunctionApiElement.forEach(throwingBiConsumer((serviceApiTypeElement, serviceConsumerTypeElements) -> {
 						awsCloudFunctionStubClassNames.add(generateAwsCloudFunctionStubClass(serviceApiTypeElement, serviceConsumerTypeElements));
 					}));
 					generateFlangeDependenciesList(DEPENDENCIES_LIST_PLATFORM_AWS_FILENAME, awsCloudFunctionStubClassNames);
@@ -207,7 +223,10 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 			)) {
 				final TypeMirror typeArgument = getOnly(returnDeclaredType.getTypeArguments(), IllegalStateException::new); //CompletableFuture<?> is expected to only have one type argument
 				final MethodSpec.Builder methodSpecBuilder = MethodSpec.overriding(methodElement); //TODO comment
-				methodSpecBuilder.addStatement("return invokeAsync(new $T<$L>(){}, $S)", GenericType.class, typeArgument, methodName); //TODO finish; add parameters
+				final String argsAsSuffix = !methodSpecBuilder.parameters.isEmpty()
+						? methodSpecBuilder.parameters.stream().map(param -> param.name).collect(joining(", ", ", ", "")) //`, …`
+						: ""; //if there are no args, don't include any suffix, not even a comma
+				methodSpecBuilder.addStatement("return invokeAsync(new $T<$L>(){}, $S$L)", GenericType.class, typeArgument, methodName, argsAsSuffix);
 				lambdaStubClassSpecBuilder.addMethod(methodSpecBuilder.build());
 			} else {
 				getProcessingEnvironment().getMessager().printMessage(ERROR,
@@ -229,23 +248,25 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 
 	/**
 	 * Generates the AWS Lambda skeleton class for a FaaS service implementation.
+	 * @param serviceApiClassName The name of the class representing the service API; typically the interface the service implementation implements.
 	 * @param serviceImplTypeElement The element representing the implementation of the FaaS service to be invoked by the skeleton.
 	 * @throws IOException if there is an I/O error writing the class.
 	 * @return The class name of the generated skeleton class.
 	 */
-	protected ClassName generateAwsCloudFunctionServiceSkeletonClass(@Nonnull final TypeElement serviceImplTypeElement) throws IOException {
+	protected ClassName generateAwsCloudFunctionServiceSkeletonClass(@Nonnull final ClassName serviceApiClassName,
+			@Nonnull final TypeElement serviceImplTypeElement) throws IOException {
 		final ClassName serviceImplClassName = ClassName.get(serviceImplTypeElement);
 		final ClassName awsLambdaHandlerClassName = ClassName.get(serviceImplClassName.packageName(),
 				serviceImplClassName.simpleName() + AWS_CLOUD_FUNCTION_SKELETON_CLASS_NAME_SUFFIX);
-		final TypeName awsLambdaHandlerSuperClassName = ParameterizedTypeName.get(AWS_CLOUD_FUNCTION_SERVICE_HANDLER_CLASS_NAME, serviceImplClassName);
-		//TODO look at the implemented interfaces to determine the API name to use, not the implementation
-		//`public final class MyServiceImpl_FlangeLambdaHandler …`
+		final TypeName awsLambdaHandlerSuperClassName = ParameterizedTypeName.get(ABSTRACT_AWS_CLOUD_FUNCTION_SERVICE_HANDLER_CLASS_NAME, serviceApiClassName,
+				serviceImplClassName);
+		//`public final class MyServiceImpl_FlangeLambdaHandler extends AbstractAwsCloudFunctionServiceHandler …`
 		final TypeSpec awsLambdaHandlerClassSpec = TypeSpec.classBuilder(awsLambdaHandlerClassName).addOriginatingElement(serviceImplTypeElement) //
 				.addModifiers(Modifier.PUBLIC, Modifier.FINAL).superclass(awsLambdaHandlerSuperClassName) //
-				.addJavadoc("AWS Lambda handler skeleton for {@link $T}.", serviceImplClassName) //
+				.addJavadoc("AWS Lambda handler skeleton for {@link $T} service implementation {@link $T}.", serviceApiClassName, serviceImplClassName) //
 				.addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC) //constructor
 						.addJavadoc("Constructor.") //
-						.addStatement("super($T.class)", serviceImplClassName).build())
+						.addStatement("super($T.class, $T.class)", serviceApiClassName, serviceImplClassName).build())
 				.build();
 		final JavaFile awsLambdaHandlerClassJavaFile = JavaFile.builder(serviceImplClassName.packageName(), awsLambdaHandlerClassSpec) //
 				.addFileComment("""
@@ -324,13 +345,24 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 	}
 
 	/**
+	 * Generates an AWS CloudFormation reference in the form <code>!Sub …</code> to reference the AWS Lambda function representing the indicated service API.
+	 * @param serviceApiClassName The class name of the service API the function represents.
+	 * @return A reference, suitable for placing in a CloudFormation template, to the AWS Lambda function representing the indicated service API.
+	 */
+	private static String awsCloudFormationServiceApiFunctionNameReference(@Nonnull final ClassName serviceApiClassName) {
+		return "!Sub \"flange-${Env}-%s\"".formatted(serviceApiClassName.simpleName()); //TODO consider appending short hash of fully-qualified package+class to prevent clashes
+	}
+
+	/**
 	 * Generates the SAM template for deploying a FaaS service implementation.
 	 * @param awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames The class names of the service implementations and generated AWS Lambda handler skeleton
 	 *          classes; each pair associated with the class name of the service API class, which is typically an interface.
+	 * @param consumedCloudFunctionApiClassNamesByConsumerClassName For each consumer class, a set of all cloud function API classes that the consumer consumes.
 	 * @throws IOException if there is an I/O error writing the SAM template.
 	 */
 	protected void generateAwsSamTemplate(
-			@Nonnull final Map<ClassName, Map.Entry<ClassName, ClassName>> awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames) throws IOException {
+			@Nonnull final Map<ClassName, Map.Entry<ClassName, ClassName>> awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames,
+			@Nonnull final Map<ClassName, Set<ClassName>> consumedCloudFunctionApiClassNamesByConsumerClassName) throws IOException {
 		final String samFilename = "sam.yaml"; //TODO use constant
 		try (
 				final InputStream inputStream = findResourceAsStream(getClass(), RESOURCE_SAM_INTRO)
@@ -346,17 +378,32 @@ public class FlangeCloudAnnotationProcessor extends BaseAnnotationProcessor {
 				writer.write("%n".formatted()); //TODO eventually parse and interpolate the original YAML file
 				writer.write("Resources:%n%n".formatted());
 				awsCloudFunctionServiceImplSkeletonsByServiceApiClassNames.forEach(throwingBiConsumer((serviceApiClassName, serviceImplSkeletonClassNameEntry) -> {
+					final ClassName serviceImplClassName = serviceImplSkeletonClassNameEntry.getKey();
+					final ClassName serviceSkeletonClassName = serviceImplSkeletonClassNameEntry.getValue();
 					writer.write("  %s:%n".formatted(serviceApiClassName.simpleName().replace("_", ""))); //TODO refactor using logical ID sanitizing method
 					writer.write("    Type: AWS::Serverless::Function%n".formatted());
 					writer.write("    Properties:%n".formatted());
-					writer.write("      FunctionName: !Sub \"flange-${Env}-%s\"%n".formatted(serviceApiClassName.simpleName())); //TODO consider appending short hash of fully-qualified package+class to prevent clashes 
+					writer.write("      FunctionName: %s%n".formatted(awsCloudFormationServiceApiFunctionNameReference(serviceApiClassName)));
 					writer.write("      CodeUri:%n".formatted());
 					writer.write("        Bucket:%n".formatted());
 					writer.write("          Fn::ImportValue:%n".formatted());
 					writer.write("            !Sub \"flange-${Env}:StagingBucketName\"%n".formatted());
-					writer.write("        Key: !Sub \"%s-aws-lambda.zip\"%n".formatted(serviceImplSkeletonClassNameEntry.getKey().simpleName())); //TODO later interpolate version 
-					writer.write("      Handler: %s::%s%n".formatted(serviceImplSkeletonClassNameEntry.getValue().canonicalName(), "handleRequest")); //TODO use constant
-					//TODO add environment variable for active profiles
+					writer.write("        Key: !Sub \"%s-aws-lambda.zip\"%n".formatted(serviceImplClassName.simpleName())); //TODO later interpolate version 
+					writer.write("      Handler: %s::%s%n".formatted(serviceSkeletonClassName.canonicalName(), "handleRequest")); //TODO use constant
+					//see if this service implementation itself depends on other cloud function APIs; if so, we'll need to add permissions
+					final Set<ClassName> consumedCloudFunctionApiClassNames = consumedCloudFunctionApiClassNamesByConsumerClassName.get(serviceImplClassName);
+					if(consumedCloudFunctionApiClassNames != null && !consumedCloudFunctionApiClassNames.isEmpty()) {
+						writer.write("      Policies:%n".formatted());
+						consumedCloudFunctionApiClassNames.forEach(throwingConsumer(consumedCloudFunctionApiClassName -> {
+							writer.write("        - LambdaInvokePolicy:%n".formatted());
+							writer.write("            FunctionName: %s%n".formatted(awsCloudFormationServiceApiFunctionNameReference(consumedCloudFunctionApiClassName)));
+						}));
+					}
+					writer.write("      Environment:%n".formatted());
+					writer.write("        Variables:%n".formatted());
+					writer.write("          FLANGE_PLATFORM: %s%n".formatted(FlangePlatformAws.ID));
+					writer.write("          FLANGE_ENV: !Ref Env%n".formatted()); //TODO rename to FlangeEnv; use constant
+					//TODO add environment variable for active profile
 				}));
 			}
 		}
