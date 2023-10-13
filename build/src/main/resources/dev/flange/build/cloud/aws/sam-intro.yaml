@@ -22,4 +22,4 @@ Globals:
     Runtime: java17
     Architectures: [x86_64]
     MemorySize: 800
-    Timeout: 4 #4 s
+    Timeout: 8 #8 s
