@@ -24,6 +24,7 @@ if [[ -f $awsProfileFile ]]; then
   awsProfile="$(< $awsProfileFile)"
   awsProfileOption="--profile $awsProfile"
 else
+  awsProfile=""
   awsProfileOption=""
 fi
 
