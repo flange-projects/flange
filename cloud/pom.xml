@@ -12,7 +12,7 @@
 	<artifactId>flange-cloud</artifactId>
 
 	<name>Flange Cloud</name>
-	<description>Flange cloud definitions and API.</description>
+	<description>Flange Cloud definitions and API.</description>
 
 	<dependencies>
 		<dependency>
