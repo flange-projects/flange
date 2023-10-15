@@ -12,7 +12,7 @@
 	<artifactId>flange-cloud-aws</artifactId>
 
 	<name>Flange Cloud AWS</name>
-	<description>Flange cloud implementation for Amazon Web Services (AWS).</description>
+	<description>Flange Cloud implementation for Amazon Web Services (AWS).</description>
 
 	<dependencies>
 		<dependency>
@@ -68,6 +68,11 @@
 		<dependency> <!-- required e.g. for profile to assume a role via the SDK -->
 			<groupId>software.amazon.awssdk</groupId>
 			<artifactId>sts</artifactId>
+		</dependency>
+
+		<dependency> <!-- AWS SDK uses commons-logging; re-route it to SLF4J  -->
+			<groupId>org.slf4j</groupId>
+			<artifactId>jcl-over-slf4j</artifactId>
 		</dependency>
 	</dependencies>
 

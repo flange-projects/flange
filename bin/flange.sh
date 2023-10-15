@@ -9,11 +9,17 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 usage() {
   echo 'Flange CLI (Bash version)' >&2
+  echo
   echo 'Deploys cloud projects to an environment such as dev or prod.' >&2
-  echo 'Usage: flange cloud deploy <env> [--dry-run]' >&2
+  echo "Usage: $(tput bold)flange cloud deploy <env> [--dry-run]$(tput sgr0)" >&2
   echo 'Example: flange cloud deploy' >&2
   echo 'The AWS profile specified in the `aws-profile` file will be used, if present.' >&2
   echo 'Depends on the `flange-<env>` CloudFormation stack.' >&2
+  echo
+  echo 'Executes an application' >&2
+  echo "Usage: $(tput bold)flange exec <main-class> [<args>...]$(tput sgr0)" >&2
+  echo 'Example: flange exec org.example.package.Application' >&2
+  echo 'Single quotes are not currently supported in arguments.' >&2
 }
 
 args=()
@@ -36,12 +42,6 @@ if (( ${#args[@]} <1)); then
   exit 1
 fi
 
-echo -n "$(tput bold)Flange$(tput sgr0)"
-if (( $dryRun )); then
-  echo -n " $(tput rev)(dry run)$(tput sgr0)"
-fi
-echo
-
 command=${args[0]}
 
 # TODO check for AWS profile if `--platform aws` is indicated
@@ -50,6 +50,7 @@ if [[ -f $awsProfileFile ]]; then
   awsProfile="$(< $awsProfileFile)"
   awsProfileOption="--profile $awsProfile"
 else
+  awsProfile=""
   awsProfileOption=""
 fi
 
@@ -81,6 +82,12 @@ cloudDeploy() {
     usage
     exit 1
   fi
+
+  echo -n "$(tput bold)Flange$(tput sgr0)"
+  if (( $dryRun )); then
+    echo -n " $(tput rev)(dry run)$(tput sgr0)"
+  fi
+  echo
 
   env=${args[2]}
   echo "Deploying projects to $(tput bold)$env$(tput sgr0) environment ..."
@@ -136,8 +143,24 @@ cloudDeployTraverse() {
   fi
 }
 
+## `flange exec`
+
+exec() {
+  if (( ${#args[@]} < 2 )); then
+    echo "$(tput bold)Incorrect number of arguments: ${#args[@]}$(tput sgr0)" >&2
+    usage
+    exit 1
+  fi
+  execMainClass=${args[1]}
+  execArgs=("${args[@]:2}")
+  # Maven Exec Plugin seems to support either single or double quotes as the argument delimiter, which no escaping.
+  # This approach uses a single quote as a delimiter; thus the arguments themselves must not contain single quotes.
+  mvn exec:java -Dexec.mainClass="$execMainClass" -Dexec.args="${execArgs[*]@Q}" --quiet
+}
+
 case $command in
   cloud) cloud;;
+  exec) exec;;
   *)
     echo "$(tput bold)Unknown command: $command$(tput sgr0)" >&2
     usage

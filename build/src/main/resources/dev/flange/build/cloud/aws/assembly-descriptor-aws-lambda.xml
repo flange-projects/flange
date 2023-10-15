@@ -8,6 +8,7 @@
 	<includeBaseDirectory>false</includeBaseDirectory>
 
 	<dependencySets>
+		<!-- project -->
 		<dependencySet>
 			<useProjectArtifact>true</useProjectArtifact>
 			<includes>
@@ -21,9 +22,21 @@
 			</unpackOptions>
 			<unpack>true</unpack>
 		</dependencySet>
+		<!-- project runtime dependencies -->
 		<dependencySet>
-			<outputDirectory>lib</outputDirectory>
+			<scope>runtime</scope>
 			<useProjectArtifact>false</useProjectArtifact>
+			<outputDirectory>lib</outputDirectory>
+		</dependencySet>
+		<!-- Flange Cloud AWS runtime dependencies -->
+		<dependencySet>
+			<scope>compile</scope>
+			<useProjectArtifact>false</useProjectArtifact>
+			<includes>
+				<include>dev.flange:flange-cloud-aws-runtime</include>
+			</includes>
+			<useTransitiveFiltering>true</useTransitiveFiltering>
+			<outputDirectory>lib</outputDirectory>
 		</dependencySet>
 	</dependencySets>
 

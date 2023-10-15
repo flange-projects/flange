@@ -43,6 +43,7 @@
 		<module>cloud</module>
 		<module>cloud-application</module>
 		<module>cloud-aws</module>
+		<module>cloud-aws-runtime</module>
 	</modules>
 
 	<dependencyManagement>
@@ -80,6 +81,12 @@
 			<dependency>
 				<groupId>dev.flange</groupId>
 				<artifactId>flange-cloud-aws</artifactId>
+				<version>0.1.0-SNAPSHOT</version>
+			</dependency>
+
+			<dependency>
+				<groupId>dev.flange</groupId>
+				<artifactId>flange-cloud-aws-runtime</artifactId>
 				<version>0.1.0-SNAPSHOT</version>
 			</dependency>
 
