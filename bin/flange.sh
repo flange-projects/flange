@@ -155,7 +155,7 @@ exec() {
   execArgs=("${args[@]:2}")
   # Maven Exec Plugin seems to support either single or double quotes as the argument delimiter, which no escaping.
   # This approach uses a single quote as a delimiter; thus the arguments themselves must not contain single quotes.
-  mvn exec:java -Dexec.mainClass="$execMainClass" -Dexec.args="${execArgs[*]@Q}" --quiet
+  mvn exec:java -Dexec.mainClass="$execMainClass" -Dexec.args="${execArgs[*]@Q}" -Dexec.cleanupDaemonThreads=false --quiet
 }
 
 case $command in
