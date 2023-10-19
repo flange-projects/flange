@@ -29,6 +29,7 @@ import javax.annotation.*;
 
 import com.fasterxml.classmate.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.globalmentor.util.DataException;
 
 import dev.flange.cloud.CloudFunctionApi;
 import io.clogr.Clogged;
@@ -117,14 +118,13 @@ public abstract class AbstractAwsCloudFunctionApiStub implements Clogged, Confou
 			throw lambdaException; //TODO retry as needed based upon the error
 		}
 		//TODO catch LamdaException if necessary; we should retry some of these
-		final String responsePayloadJson = response.payload().asUtf8String();
-		//TODO delete System.out.println("response payload JSON: " + responsePayloadJson); //TODO delete
-
 		try {
 			//check for error as per [AWS Lambda function errors in Java](https://docs.aws.amazon.com/lambda/latest/dg/java-exceptions.html)
-			return jsonReaderForType(genericReturnType).readValue(responsePayloadJson);
+			return unmarshalJson(response.payload().asInputStream(), genericReturnType);
 		} catch(final IOException ioException) {
 			throw new RuntimeException("Error parsing AWS Lambda response JSON: " + ioException.getMessage(), ioException); //TODO decide on best type of exception
+		} catch(final DataException dataException) {
+			throw new RuntimeException("Data error unmarshalling result value.", dataException); //TODO decide on best exception type; consider JAVA-350; revisit other exceptions as well 
 		}
 	}
 

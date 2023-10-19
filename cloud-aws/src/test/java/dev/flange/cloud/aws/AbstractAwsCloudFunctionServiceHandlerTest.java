@@ -29,7 +29,7 @@ import java.util.*;
 
 import org.junit.jupiter.api.*;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.classmate.GenericType;
 import com.globalmentor.util.stream.Streams;
 
 import dev.flange.cloud.aws.MarshallingTest.FooBar;
@@ -46,7 +46,7 @@ public class AbstractAwsCloudFunctionServiceHandlerTest {
 		assertThat("no arguments", AbstractAwsCloudFunctionServiceHandler.unmarshalMethodArgs(List.of(), List.of()), is(emptyList()));
 		assertThat("manual argument list",
 				AbstractAwsCloudFunctionServiceHandler.unmarshalMethodArgs(List.of("en", Map.of("foo", Map.of("value", 123), "bar", "foobar"), "en"),
-						List.of(String.class, typeTokenToType(new TypeReference<FooBar>() {}), Locale.class)),
+						List.of(String.class, typeTokenToType(new GenericType<FooBar>() {}), Locale.class)),
 				is(List.of("en", new FooBar(new FooBar.Foo(123), "foobar"), Locale.forLanguageTag("en"))));
 		final Method fooApiBarMethod = declaredMethodsHavingName(FooApi.class, "bar").collect(Streams.toOnly());
 		assertThat("method argument list",
