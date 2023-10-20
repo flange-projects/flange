@@ -16,20 +16,23 @@
 
 package dev.flange.cloud.aws;
 
-import java.io.IOException;
+import java.io.*;
 import java.lang.reflect.*;
 import java.util.Locale;
+import java.util.Optional;
 
 import javax.annotation.*;
 
 import com.fasterxml.classmate.GenericType;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.exc.*;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.globalmentor.util.DataException;
 
 /**
  * Shared definitions and common utilities for marshalling in AWS.
@@ -169,6 +172,47 @@ public class Marshalling {
 			return (Type)typeToken;
 		}
 		throw new IllegalArgumentException("Type token must be an instance of `Class`, or have a super class providing a single generic type argument.");
+	}
+
+	/**
+	 * Serializes some value for marshalling.
+	 * @apiNote The returned output stream is useful for unit testing.
+	 * @implNote If an {@code Optional<>} instance is given, its value will be extracted and marshalled, using <code>null</code> for
+	 *           <code>Optional.empty()</code>.
+	 * @param <OS> The type of output stream to write to.
+	 * @param value The value to marshal.
+	 * @param outputStream The output stream to which to write the value.
+	 * @return The given output stream.
+	 * @throws IOException If an I/O error occurs.
+	 * @throws DataException If a data conversion or mapping exception occurs.
+	 */
+	public static <OS extends OutputStream> OS marshalJson(@Nullable final Object value, OS outputStream) throws IOException, DataException {
+		try {
+			JSON_WRITER.writeValue(outputStream, value);
+		} catch(final StreamWriteException | DatabindException jacksonException) {
+			throw new DataException(jacksonException);
+		}
+		return outputStream;
+	}
+
+	/**
+	 * Deserializes some marshalled value.
+	 * @implNote {@link Optional} is supported, both with a value present and not present.
+	 * @param <T> The type of value expected.
+	 * @param inputStream The input stream from which to read the value.
+	 * @param valueType The type information for the expected type, including generics information if appropriate.
+	 * @return The the unmarshalled value, which may be {@link Optional#empty()} if the input is JSON <code>null</code> and {@link Optional} is expected;
+	 *         <code>null</code> if the input is JSON <code>null</code> for any expected type, and <code>null</code> if the value is any valid JSON and the
+	 *         expected value is {@link Void}.
+	 * @throws IOException If an I/O error occurs.
+	 * @throws DataException If a data conversion or mapping exception occurs.
+	 */
+	public static <T> T unmarshalJson(@Nonnull final InputStream inputStream, @Nonnull GenericType<T> valueType) throws IOException, DataException {
+		try {
+			return jsonReaderForType(valueType).readValue(inputStream);
+		} catch(final StreamReadException | DatabindException jacksonException) {
+			throw new DataException(jacksonException);
+		}
 	}
 
 }

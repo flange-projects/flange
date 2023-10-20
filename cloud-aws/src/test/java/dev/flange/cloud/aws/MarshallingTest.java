@@ -17,10 +17,11 @@
 package dev.flange.cloud.aws;
 
 import static dev.flange.cloud.aws.Marshalling.*;
+import static java.nio.charset.StandardCharsets.*;
 import static org.hamcrest.MatcherAssert.*;
 import static org.hamcrest.Matchers.*;
 
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
 
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ import com.fasterxml.classmate.GenericType;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.globalmentor.util.DataException;
 
 /**
  * Tests of {@link Marshalling}.
@@ -48,7 +50,6 @@ public class MarshallingTest {
 	/** @see Marshalling#typeTokenToJavaType(TypeFactory, Object) */
 	@Test
 	void testGenericTypeToJavaType() {
-		@SuppressWarnings("serial")
 		final GenericType<?> genericType = new GenericType<List<String>>() {};
 		final TypeReference<?> typeReference = new TypeReference<List<String>>() {};
 		final TypeFactory typeFactory = TypeFactory.defaultInstance();
@@ -64,17 +65,45 @@ public class MarshallingTest {
 		assertThat("`Integer` to `int`", Marshalling.convertValue(123, int.class), is(123));
 		assertThat("`Integer` to `Long`", Marshalling.convertValue(123, Long.class), is(123L));
 		assertThat("`String` to `Locale`", Marshalling.convertValue("en-US", Locale.class), is(Locale.forLanguageTag("en-US")));
-		assertThat("`List<String>` to `List<String>`", Marshalling.convertValue(List.of("en", "fr"), typeTokenToType(new TypeReference<List<String>>() {})),
+		assertThat("`List<String>` to `List<String>`", Marshalling.convertValue(List.of("en", "fr"), typeTokenToType(new GenericType<List<String>>() {})),
 				is(List.of("en", "fr")));
-		assertThat("`List<String>` to `List<Locale>`", Marshalling.convertValue(List.of("en", "fr"), typeTokenToType(new TypeReference<List<Locale>>() {})),
+		assertThat("`List<String>` to `List<Locale>`", Marshalling.convertValue(List.of("en", "fr"), typeTokenToType(new GenericType<List<Locale>>() {})),
 				is(List.of(Locale.ENGLISH, Locale.FRENCH)));
-		assertThat("`List<Integer>` to `List<Integer>`", Marshalling.convertValue(List.of(1, 2, 3), typeTokenToType(new TypeReference<List<Integer>>() {})),
+		assertThat("`List<Integer>` to `List<Integer>`", Marshalling.convertValue(List.of(1, 2, 3), typeTokenToType(new GenericType<List<Integer>>() {})),
 				is(List.of(1, 2, 3)));
-		assertThat("`List<Integer>` to `List<Long>`", Marshalling.convertValue(List.of(1, 2, 3), typeTokenToType(new TypeReference<List<Long>>() {})),
+		assertThat("`List<Integer>` to `List<Long>`", Marshalling.convertValue(List.of(1, 2, 3), typeTokenToType(new GenericType<List<Long>>() {})),
 				is(List.of(1L, 2L, 3L)));
 		assertThat("`Map<String, Object>` to `Foobar`",
-				Marshalling.convertValue(Map.of("foo", Map.of("value", 123), "bar", "foobar"), typeTokenToType(new TypeReference<FooBar>() {})),
+				Marshalling.convertValue(Map.of("foo", Map.of("value", 123), "bar", "foobar"), typeTokenToType(new GenericType<FooBar>() {})),
 				is(new FooBar(new FooBar.Foo(123), "foobar")));
+	}
+
+	/**
+	 * Test marshalling a value. Significantly confirms that {@link Optional} serialization occurs as expected.
+	 * @see Marshalling#marshalJson(Object, OutputStream)
+	 */
+	@Test
+	void testMarshalJson() throws IOException, DataException {
+		assertThat(new String(Marshalling.marshalJson(null, new ByteArrayOutputStream()).toByteArray(), UTF_8), is("null"));
+		assertThat(new String(Marshalling.marshalJson("foo", new ByteArrayOutputStream()).toByteArray(), UTF_8), is("\"foo\""));
+		assertThat(new String(Marshalling.marshalJson(Optional.empty(), new ByteArrayOutputStream()).toByteArray(), UTF_8), is("null"));
+		assertThat(new String(Marshalling.marshalJson(Optional.of("bar"), new ByteArrayOutputStream()).toByteArray(), UTF_8), is("\"bar\""));
+	}
+
+	/**
+	 * Test unmarshalling a value. Significantly confirms that {@link Optional} deserialization occurs as expected.
+	 * @see Marshalling#unmarshalJson(InputStream, GenericType)
+	 */
+	@Test
+	void testUnmarshalJson() throws IOException, DataException {
+		assertThat("`null` for expected `void` (e.g. `void` method return value)",
+				Marshalling.unmarshalJson(new ByteArrayInputStream("null".getBytes(UTF_8)), new GenericType<Void>() {}), is(nullValue()));
+		assertThat("`null` for expected non-`void` type (not expected in real life)",
+				Marshalling.unmarshalJson(new ByteArrayInputStream("\"bad\"".getBytes(UTF_8)), new GenericType<Void>() {}), is(nullValue()));
+		assertThat(Marshalling.unmarshalJson(new ByteArrayInputStream("null".getBytes(UTF_8)), new GenericType<String>() {}), is(nullValue()));
+		assertThat(Marshalling.unmarshalJson(new ByteArrayInputStream("\"foo\"".getBytes(UTF_8)), new GenericType<String>() {}), is("foo"));
+		assertThat(Marshalling.unmarshalJson(new ByteArrayInputStream("null".getBytes(UTF_8)), new GenericType<Optional<String>>() {}), is(Optional.empty()));
+		assertThat(Marshalling.unmarshalJson(new ByteArrayInputStream("\"bar\"".getBytes(UTF_8)), new GenericType<Optional<String>>() {}), is(Optional.of("bar")));
 	}
 
 	public record FooBar(Foo foo, String bar) {
