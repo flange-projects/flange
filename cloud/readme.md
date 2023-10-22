@@ -1,6 +1,6 @@
 # Flange Cloud™
 
-_Design a monolith. Deploy cloud native._
+_Build a monolith. Deploy cloud native._
 
 Flange Cloud transparently transforms and deploys a well-designed monolith application to a distributed, elastic, highly-scalable cloud-native application. Flange merely requires that your application architecture have well-placed “perforations” reflecting a modular design—which in itself is a good practice.
 
