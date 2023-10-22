@@ -8,7 +8,7 @@ Flange Cloud transparently transforms and deploys a well-designed monolith appli
 
 A “perforated monolith” is a single application that can be run as an independent unit, while still following good architectural principles such as separation of concerns and loose coupling. It follows the best practice of programming to interfaces, while additionally minding latency and possible error conditions at interface boundaries (“perforations”) that potentially represent distributed communication.
 
-The term “performation” comes from [Jason Katzer](https://www.jasonkatzer.com/) in his book [_Learning Serverless_](https://www.oreilly.com/library/view/learning-serverless/9781492057000/). Although Flange was designed independently, and was already implemented as a working proof of concept without knowledge of the specific content in that book, Jason's recommendation for “perforating a monolith” nevertheless aligns precisely with the philosophy of Flange Cloud:
+The term “perforation” comes from [Jason Katzer](https://www.jasonkatzer.com/) in his book [_Learning Serverless_](https://www.oreilly.com/library/view/learning-serverless/9781492057000/). Although Flange was designed independently, and was already implemented as a working proof of concept without knowledge of the specific content in that book, Jason's recommendation for “perforating a monolith” nevertheless aligns precisely with the philosophy of Flange Cloud:
 
 > [A monolith application designed with a] clear separation of concerns and a well-defined and specified contract between the … components; … would be **perforated for future separation** when it would inevitably be required to be split out of the monolith. _[emphasis added]_
 >
