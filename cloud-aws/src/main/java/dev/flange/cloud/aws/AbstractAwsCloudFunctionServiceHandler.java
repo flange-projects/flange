@@ -25,7 +25,6 @@ import static java.util.Objects.*;
 
 import java.io.*;
 import java.lang.reflect.*;
-import java.rmi.MarshalException;
 import java.util.*;
 import java.util.AbstractMap.*;
 import java.util.concurrent.*;
@@ -34,9 +33,9 @@ import java.util.stream.Stream;
 import javax.annotation.*;
 
 import com.amazonaws.services.lambda.runtime.*;
-import com.globalmentor.util.DataException;
 
 import dev.flange.*;
+import dev.flange.cloud.FlangeMarshalException;
 import io.clogr.Clogged;
 
 /**
@@ -91,6 +90,9 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 	 * @implNote Unlike the stub, this handler implementation supports any method that returns any type of {@link Future}, not just {@link CompletableFuture}.
 	 * @implNote A return value of {@code Optional<>} will be extracted and its value marshalled, using <code>null</code> for <code>Optional.empty()</code>.
 	 * @throws IllegalStateException if there was an unsupported result or unexpected exception invoking the method.
+	 * @throws IOException if an I/O error occurs.
+	 * @throws FlangeMarshalException if any error related to marshalling occurs, including serialization/deserialization and data conversion/mapping, that isn't
+	 *           specific to I/O.
 	 */
 	@Override
 	public void handleRequest(final InputStream inputStream, final OutputStream outputStream, final Context context) throws IOException {
@@ -129,11 +131,7 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 		}
 		//final ClientContext clientContext = context.getClientContext();	//TODO see if this can provide us information from https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/lambda/model/InvokeRequest.Builder.html#clientContext(java.lang.String)
 		final BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(outputStream);
-		try {
-			marshalJson(resultValue, bufferedOutputStream).flush(); //be sure to flush after marshalling
-		} catch(final DataException dataException) {
-			throw new MarshalException("Data error marshalling result value.", dataException); //TODO decide on best exception type; consider JAVA-350; revisit other exceptions as well 
-		}
+		marshalJson(resultValue, bufferedOutputStream).flush(); //be sure to flush after marshalling
 		bufferedOutputStream.flush();
 	}
 
@@ -159,7 +157,12 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 		}
 		//TODO delete getLogger().atInfo().log("Handling request for method name `{}`.", methodName); //TODO delete
 		final List<Type> methodArgTypes = asList(method.getGenericParameterTypes()); //TODO add PLOOP convenience list method
-		final List<?> methodArgs = unmarshalMethodArgs(marshalledMethodArgs, methodArgTypes);
+		final List<?> methodArgs;
+		try {
+			methodArgs = unmarshalMethodArgs(marshalledMethodArgs, methodArgTypes);
+		} catch(final IllegalArgumentException illegalArgumentException) {
+			throw new FlangeMarshalException("Error marshalling method arguments.", illegalArgumentException);
+		}
 		try {
 			//note that the service implementation might be returning a `Future` subtype via covariance, but that should not cause any problems
 			final Object result = method.invoke(getService(), methodArgs.toArray(Object[]::new));
@@ -187,6 +190,7 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 	 * @param argTypes The types of arguments as provided by a method, potentially each including generics information, such as those supplied by
 	 *          {@link Method#getGenericParameterTypes()}.
 	 * @return A list of unmarshalled argument values to be passed to a method with the given argument types.
+	 * @throws IllegalArgumentException if one of the marshalled arguments cannot be converted.
 	 */
 	static List<?> unmarshalMethodArgs(@Nonnull final List<?> marshalledArgs, @Nonnull final List<Type> argTypes) {
 		return zip(marshalledArgs.stream(), argTypes.stream(), (marshalledArg, argType) -> convertValue(marshalledArg, argType)).toList();

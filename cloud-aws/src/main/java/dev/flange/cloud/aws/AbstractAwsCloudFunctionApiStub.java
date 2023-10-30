@@ -29,9 +29,9 @@ import javax.annotation.*;
 
 import com.fasterxml.classmate.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.globalmentor.util.DataException;
 
 import dev.flange.cloud.CloudFunctionApi;
+import dev.flange.cloud.FlangeMarshalException;
 import io.clogr.Clogged;
 import io.confound.Confounded;
 import software.amazon.awssdk.core.SdkBytes;
@@ -95,6 +95,8 @@ public abstract class AbstractAwsCloudFunctionApiStub implements Clogged, Confou
 	 * @param methodName The name of the method to be invoked.
 	 * @param methodArguments The arguments of method to be marshalled.
 	 * @return The value returned from the invocation.
+	 * @throws FlangeMarshalException if any error related to marshalling occurs, including general I/O, serialization/deserialization, and data
+	 *           conversion/mapping.
 	 */
 	protected <T> T invoke(@Nonnull GenericType<T> genericReturnType, @Nonnull final String methodName, @Nonnull final Object... methodArguments) {
 		//TODO add qualifier if needed
@@ -103,7 +105,7 @@ public abstract class AbstractAwsCloudFunctionApiStub implements Clogged, Confou
 		try {
 			inputJson = JSON_WRITER.writeValueAsString(input);
 		} catch(final JsonProcessingException jsonProcessingException) {
-			throw new RuntimeException("Unexpected error serializing JSON.", jsonProcessingException); //TODO improve
+			throw new FlangeMarshalException("Unexpected error serializing JSON.", jsonProcessingException);
 		}
 		//TODO delete System.out.println("request payload JSON: " + inputJson); //TODO delete
 		final SdkBytes requestPayload = SdkBytes.fromUtf8String(inputJson);
@@ -122,9 +124,7 @@ public abstract class AbstractAwsCloudFunctionApiStub implements Clogged, Confou
 			//check for error as per [AWS Lambda function errors in Java](https://docs.aws.amazon.com/lambda/latest/dg/java-exceptions.html)
 			return unmarshalJson(response.payload().asInputStream(), genericReturnType);
 		} catch(final IOException ioException) {
-			throw new RuntimeException("Error parsing AWS Lambda response JSON: " + ioException.getMessage(), ioException); //TODO decide on best type of exception
-		} catch(final DataException dataException) {
-			throw new RuntimeException("Data error unmarshalling result value.", dataException); //TODO decide on best exception type; consider JAVA-350; revisit other exceptions as well 
+			throw new FlangeMarshalException("Error parsing AWS Lambda response JSON: " + ioException.getMessage(), ioException);
 		}
 	}
 
