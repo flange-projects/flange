@@ -32,6 +32,8 @@ import org.junit.jupiter.api.*;
 
 import com.globalmentor.java.StackTrace;
 
+import dev.flange.cloud.UnavailableMarshalledThrowable;
+
 /**
  * Tests of {@link AwsLambda}.
  * @author Garret Wilson
@@ -237,13 +239,13 @@ public class AwsLambdaTest {
 				new UnhandledError("I/O problem", IOException.class.getName(), List.of(), null).createThrowable(), new IOException("I/O problem"), false);
 		assertEqualUnhandledErrorThrowables("Unknown throwable type gets placeholder.",
 				new UnhandledError("Unknown", "com.example.NoSuchThrowable", List.of(), null).createThrowable(),
-				new UnhandledError.PlaceholderThrowable("com.example.NoSuchThrowable", "Unknown", null), false);
+				new UnavailableMarshalledThrowable("com.example.NoSuchThrowable", "Unknown", null), false);
 		assertEqualUnhandledErrorThrowables("Throwable type without appropriate constructor gets placeholder.",
 				new UnhandledError("Bad pattern.", PatternSyntaxException.class.getName(), List.of(), null).createThrowable(),
-				new UnhandledError.PlaceholderThrowable(PatternSyntaxException.class.getName(), "Bad pattern.", null), false);
+				new UnavailableMarshalledThrowable(PatternSyntaxException.class.getName(), "Bad pattern.", null), false);
 		assertEqualUnhandledErrorThrowables("Placeholder exception supports mising message.",
 				new UnhandledError(null, PatternSyntaxException.class.getName(), List.of(), null).createThrowable(),
-				new UnhandledError.PlaceholderThrowable(PatternSyntaxException.class.getName(), null, null), false);
+				new UnavailableMarshalledThrowable(PatternSyntaxException.class.getName(), null, null), false);
 		assertEqualUnhandledErrorThrowables("Checked exception with cause and no stack trace.",
 				new UnhandledError("I/O problem", IOException.class.getName(), List.of(),
 						new UnhandledError("Bad input", IllegalArgumentException.class.getName(), List.of(), null)).createThrowable(),

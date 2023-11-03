@@ -32,7 +32,7 @@ import com.fasterxml.jackson.core.exc.StreamReadException;
 import com.fasterxml.jackson.databind.DatabindException;
 import com.globalmentor.java.StackTrace;
 
-import dev.flange.cloud.FlangeMarshalException;
+import dev.flange.cloud.*;
 import io.clogr.Clogged;
 
 /**
@@ -144,6 +144,8 @@ public final class AwsLambda {
 
 		/**
 		 * Creates an appropriate throwable to represent this unhandled error.
+		 * @implSpec This implementation has special-case support for {@link UnavailableMarshalledThrowable}, allowing it to be full unmarshalled if possible to its
+		 *           represented throwable.
 		 * @implNote If the actual throwable indicated by {@link #errorType} cannot be instantiated for some reason (e.g. its class cannot be found or it does not
 		 *           have an appropriate constructor), a placeholder exception will be returned.
 		 * @return A throwable representing the information in this unhandled error.
@@ -171,24 +173,48 @@ public final class AwsLambda {
 		/**
 		 * Creates an appropriate bare throwable to represent this unhandled error. The cause will have been set, but the stack trace will not yet have been
 		 * updated.
+		 * @implSpec This implementation has special-case support for {@link UnavailableMarshalledThrowable}, allowing it to be full unmarshalled if possible to its
+		 *           represented throwable.
 		 * @implNote This implementation supports instances of {@link Throwable} with a constructor in the form <code>(String message, final Throwable cause)</code>
 		 *           or, if this class has no {@link #cause()} specified, the form <code>(String message, final Throwable cause)</code>. If the actual throwable
 		 *           indicated by {@link #errorType} cannot be instantiated for some reason (e.g. its class cannot be found or it does not have an appropriate
 		 *           constructor), a placeholder exception will be returned.
-		 * @return A bare throwable from the information in this unhandled error, which may be {@link PlaceholderThrowable} if the indicated exception cannot be
-		 *         created.
+		 * @return A bare throwable from the information in this unhandled error, which may be {@link UnavailableMarshalledThrowable} if the indicated exception
+		 *         cannot be created.
 		 */
 		Throwable createThrowable() {
 			@Nullable
 			final Throwable throwableCause = cause != null ? cause.toThrowable() : null;
 			try {
-				final String errorType = errorType();
+				String errorType = errorType(); //these may be replaced if we can unwrap an `UnavailableMarshalledThrowable` 
+				String errorMessage = errorMessage();
+
+				//Try to fully unmarshal `UnavailableMarshalledThrowable` if possible.
+				//If we can extract the marshalled throwable description but that throwable can't be instantiated,
+				//the code will later simple re-wrap it in an `UnavailableMarshalledThrowable`. 
+				while(UnavailableMarshalledThrowable.class.getName().equals(errorType)) { //support multiple levels of unwrapping (although that's not expected to occur under normal circumstances)
+					if(errorMessage == null) {
+						getLogger().atWarn().log("Marshalled throwable description missing message; wrapping in another layer of placeholder throwable `%s`.",
+								UnavailableMarshalledThrowable.class.getSimpleName());
+					}
+					try {
+						final UnavailableMarshalledThrowable.MarshalledThrowableDescription marshalledThrowableDescription = UnavailableMarshalledThrowable.MarshalledThrowableDescription
+								.fromMessage(errorMessage);
+						errorType = marshalledThrowableDescription.marshalledClassName(); //try to instantiate the represented throwable 
+						errorMessage = marshalledThrowableDescription.marshalledMessage();
+					} catch(final Exception exception) { //ignore low-level throwables such as `Error`, which are not meant to be caught
+						getLogger().atWarn().log(
+								"Marshalled throwable description cannot be retrieved from message `%s`; wrapping in another layer of placeholder throwable `%s`.",
+								errorMessage, UnavailableMarshalledThrowable.class.getSimpleName());
+					}
+				}
+
 				final Class<? extends Throwable> throwableClass;
 				try {
 					final Class<?> classForErrorType = Class.forName(errorType);
 					if(!Throwable.class.isAssignableFrom(classForErrorType)) { //we expect AWS Lambda to only give us errors that are of type `Throwable`
 						getLogger().atWarn().log("Marshalled AWS Lambda error type `{}` is not a `Throwable` type; using placeholder.", errorType);
-						return new PlaceholderThrowable(errorType, errorMessage(), throwableCause);
+						return new UnavailableMarshalledThrowable(errorType, errorMessage, throwableCause);
 					}
 					@SuppressWarnings("unchecked")
 					final Class<? extends Throwable> classForThrowableErrorType = (Class<? extends Throwable>)classForErrorType;
@@ -196,7 +222,7 @@ public final class AwsLambda {
 				} catch(final ClassNotFoundException classNotFoundException) {
 					//It's not unexpected that some classes thrown remotely might not be available on the client side;
 					//just use a placeholder—no warning needed.
-					return new PlaceholderThrowable(errorType(), errorMessage(), throwableCause);
+					return new UnavailableMarshalledThrowable(errorType, errorMessage, throwableCause);
 				}
 
 				//Try to find a constructor in the following order (assuming purposes of the parameters, as most exceptions follow this pattern):
@@ -204,70 +230,20 @@ public final class AwsLambda {
 				//* `(String message)` (only if `throwableCause` is `null` 
 				try {
 					final Constructor<? extends Throwable> messageCauseConstructor = throwableClass.getDeclaredConstructor(String.class, Throwable.class);
-					return messageCauseConstructor.newInstance(errorMessage(), throwableCause);
+					return messageCauseConstructor.newInstance(errorMessage, throwableCause);
 				} catch(final NoSuchMethodException noSuchMethodException) {
 					if(throwableCause == null) { //if we don't have a cause, try to construct with just the message
 						final Constructor<? extends Throwable> messageConstructor = throwableClass.getDeclaredConstructor(String.class);
-						return messageConstructor.newInstance(errorMessage());
+						return messageConstructor.newInstance(errorMessage);
 					}
 					throw noSuchMethodException; //otherwise don't even attempt a message-only constructor; let the outer `catch` deal with it
 				}
 			} catch(final LinkageError | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException
 					| NoSuchMethodException | SecurityException creationException) {
-				getLogger().atWarn().log("Marshalled AWS Lambda error type `{}` could not be created; using placeholder.", errorType);
-				return new PlaceholderThrowable(errorType, errorMessage(), throwableCause);
+				getLogger().atWarn().log("Marshalled AWS Lambda error type `{}` could not be created; using placeholder throwable `%s`.", errorType,
+						UnavailableMarshalledThrowable.class.getSimpleName());
+				return new UnavailableMarshalledThrowable(errorType, errorMessage, throwableCause);
 			}
-		}
-
-		/**
-		 * A placeholder exception for a throwable that could not be instantiated for some reason, such as its class not being available or its not having an
-		 * appropriate constructor.
-		 * @implNote This exception itself does not have the required constructors for unmarshalling and converting to a throwable, so if it were marshalled it
-		 *           would be in turn wrapped in another placeholder exception.
-		 */
-		public static class PlaceholderThrowable extends RuntimeException {
-
-			private static final long serialVersionUID = 1L;
-
-			/** The name of the class of the throwable being represented by this placeholder. */
-			private final String throwableClassName;
-
-			/** @return The name of the class of the throwable being represented by this placeholder. */
-			@Nonnull
-			public String getMarshalledClassName() {
-				return throwableClassName;
-			}
-
-			/** The detail message intended for the represented throwable. */
-			private final String throwableMessage;
-
-			/** @return The detail message intended for the represented throwable. */
-			@Nullable
-			public String getThrowableMessage() {
-				return throwableMessage;
-			}
-
-			/**
-			 * Throwable class name and throwable message.
-			 * @param throwableClassName The name of the class of the throwable being represented by this placeholder.
-			 * @param throwableMessage The detail message intended for the represented throwable.
-			 */
-			public PlaceholderThrowable(@Nonnull final String throwableClassName, @Nullable final String throwableMessage) {
-				this(throwableClassName, throwableMessage, null); //construct the exception with no cause
-			}
-
-			/**
-			 * Throwable class name, throwable message, and cause constructor.
-			 * @param throwableClassName The name of the class of the throwable being represented by this placeholder.
-			 * @param throwableMessage The detail message intended for the represented throwable.
-			 * @param throwableCause The cause intended for the represented throwable.
-			 */
-			public PlaceholderThrowable(@Nonnull final String throwableClassName, @Nullable final String throwableMessage, @Nullable final Throwable throwableCause) {
-				super(throwableClassName + (throwableMessage != null ? ": " + throwableMessage : ""), throwableCause); //`com.example.Throwable`/`com.example.Throwable: <throwableMessage>`
-				this.throwableClassName = requireNonNull(throwableClassName);
-				this.throwableMessage = throwableMessage;
-			}
-
 		}
 
 	}
