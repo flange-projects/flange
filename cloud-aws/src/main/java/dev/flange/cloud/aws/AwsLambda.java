@@ -84,15 +84,15 @@ public final class AwsLambda {
 	 * Represents an AWS Lambda unhandled error as marshalled in the response body when the invoke response indicates {@value AwsLambda#FUNCTION_ERROR_UNHANDLED}.
 	 * @see <a href="https://docs.aws.amazon.com/lambda/latest/dg/java-exceptions.html">AWS Lambda function errors in Java</a>
 	 */
-	public record UnhandledError(@Nullable String errorMessage, @Nonnull String errorType, @Nonnull List<String> stackTrace, @Nullable UnhandledError cause)
+	public record UnhandledError(@Nonnull String errorType, @Nullable String errorMessage, @Nonnull List<String> stackTrace, @Nullable UnhandledError cause)
 			implements Clogged {
 
 		/**
 		 * Validating constructor.
 		 * @implSpec Ensures that the error type is not <code>null</code>, and converts any <code>null</code> stack trace to an empty list (e.g. for a missing stack
 		 *           trace in the serialization).
-		 * @param errorMessage The error message.
 		 * @param errorType The name of the class of the type of error.
+		 * @param errorMessage The error message.
 		 * @param stackTrace The string forms of the stack trace elements.
 		 * @param cause The unhandled error cause, or <code>null</code> if not present.
 		 */
@@ -125,7 +125,7 @@ public final class AwsLambda {
 		 * @return An instance of an unhandled error from the given information.
 		 */
 		static UnhandledError fromThrowable(@Nonnull final Throwable throwable, @Nullable UnhandledError cause, @Nonnull final String... stackTrace) {
-			return new UnhandledError(throwable.getMessage(), throwable.getClass().getName(), List.of(stackTrace), cause);
+			return new UnhandledError(throwable.getClass().getName(), throwable.getMessage(), List.of(stackTrace), cause);
 		}
 
 		/**

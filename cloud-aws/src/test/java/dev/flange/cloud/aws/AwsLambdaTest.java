@@ -233,26 +233,26 @@ public class AwsLambdaTest {
 	@Test
 	void testUnhandledErrorCreateThrowable() {
 		assertEqualUnhandledErrorThrowables("Unchecked exception with no message and no stack trace.",
-				new UnhandledError(null, IllegalArgumentException.class.getName(), List.of(), null).createThrowable(), new IllegalArgumentException((String)null),
+				new UnhandledError(IllegalArgumentException.class.getName(), null, List.of(), null).createThrowable(), new IllegalArgumentException((String)null),
 				false);
 		assertEqualUnhandledErrorThrowables("Checked exception with no stack trace.",
-				new UnhandledError("I/O problem", IOException.class.getName(), List.of(), null).createThrowable(), new IOException("I/O problem"), false);
+				new UnhandledError(IOException.class.getName(), "I/O problem", List.of(), null).createThrowable(), new IOException("I/O problem"), false);
 		assertEqualUnhandledErrorThrowables("Unknown throwable type gets placeholder.",
-				new UnhandledError("Unknown", "com.example.NoSuchThrowable", List.of(), null).createThrowable(),
+				new UnhandledError("com.example.NoSuchThrowable", "Unknown", List.of(), null).createThrowable(),
 				new UnavailableMarshalledThrowable("com.example.NoSuchThrowable", "Unknown", null), false);
 		assertEqualUnhandledErrorThrowables("Throwable type without appropriate constructor gets placeholder.",
-				new UnhandledError("Bad pattern.", PatternSyntaxException.class.getName(), List.of(), null).createThrowable(),
+				new UnhandledError(PatternSyntaxException.class.getName(), "Bad pattern.", List.of(), null).createThrowable(),
 				new UnavailableMarshalledThrowable(PatternSyntaxException.class.getName(), "Bad pattern.", null), false);
 		assertEqualUnhandledErrorThrowables("Placeholder exception supports mising message.",
-				new UnhandledError(null, PatternSyntaxException.class.getName(), List.of(), null).createThrowable(),
+				new UnhandledError(PatternSyntaxException.class.getName(), null, List.of(), null).createThrowable(),
 				new UnavailableMarshalledThrowable(PatternSyntaxException.class.getName(), null, null), false);
 		assertEqualUnhandledErrorThrowables("Checked exception with cause and no stack trace.",
-				new UnhandledError("I/O problem", IOException.class.getName(), List.of(),
-						new UnhandledError("Bad input", IllegalArgumentException.class.getName(), List.of(), null)).createThrowable(),
+				new UnhandledError(IOException.class.getName(), "I/O problem", List.of(),
+						new UnhandledError(IllegalArgumentException.class.getName(), "Bad input", List.of(), null)).createThrowable(),
 				new IOException("I/O problem", new IllegalArgumentException("Bad input")), false);
 		assertEqualUnhandledErrorThrowables("Error with no cause constructor and no stack trace.",
-				new UnhandledError("org/apache/logging/log4j/BridgeAware", NoClassDefFoundError.class.getName(), List.of(),
-						new UnhandledError("org.apache.logging.log4j.BridgeAware", ClassNotFoundException.class.getName(), List.of(), null)).toThrowable(),
+				new UnhandledError(NoClassDefFoundError.class.getName(), "org/apache/logging/log4j/BridgeAware", List.of(),
+						new UnhandledError(ClassNotFoundException.class.getName(), "org.apache.logging.log4j.BridgeAware", List.of(), null)).toThrowable(),
 				clearStackTrace(new NoClassDefFoundError("org/apache/logging/log4j/BridgeAware"))
 						.initCause(clearStackTrace(new ClassNotFoundException("org.apache.logging.log4j.BridgeAware"))));
 	}
@@ -261,10 +261,10 @@ public class AwsLambdaTest {
 	@Test
 	void testUnhandledErrorToThrowable() {
 		assertEqualUnhandledErrorThrowables("Unchecked exception with no message and no stack trace.",
-				new UnhandledError(null, IllegalArgumentException.class.getName(), List.of(), null).toThrowable(),
+				new UnhandledError(IllegalArgumentException.class.getName(), null, List.of(), null).toThrowable(),
 				clearStackTrace(new IllegalArgumentException((String)null)));
 		assertEqualUnhandledErrorThrowables("Checked exception with no stack trace.",
-				new UnhandledError("I/O problem", IOException.class.getName(), List.of(), null).toThrowable(), clearStackTrace(new IOException("I/O problem")));
+				new UnhandledError(IOException.class.getName(), "I/O problem", List.of(), null).toThrowable(), clearStackTrace(new IOException("I/O problem")));
 		final List<String> illegalArgumentExceptionStackTraceStrings = List.of(
 				"dev.flange.example.cloud.hellouser_faas.service.user.impl.UserServiceImpl.findUserProfileByUsername(UserServiceImpl.java:45)",
 				"java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)",
@@ -276,7 +276,7 @@ public class AwsLambdaTest {
 				"java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source)",
 				"java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source)");
 		assertEqualUnhandledErrorThrowables("Unchecked exception with stack trace.",
-				new UnhandledError("test illegal argument exception from user service", IllegalArgumentException.class.getName(),
+				new UnhandledError(IllegalArgumentException.class.getName(), "test illegal argument exception from user service",
 						illegalArgumentExceptionStackTraceStrings, null).toThrowable(),
 				setStackTrace(new IllegalArgumentException("test illegal argument exception from user service"),
 						illegalArgumentExceptionStackTraceStrings.stream().map(StackTrace::parseElement).toArray(StackTraceElement[]::new)));
@@ -290,8 +290,8 @@ public class AwsLambdaTest {
 				"java.base//java.lang.ClassLoader.loadClass(Unknown Source)", //
 				"java.base//java.lang.ClassLoader.loadClass(Unknown Source)");
 		assertEqualUnhandledErrorThrowables("Error with no cause constructor with stack traces.",
-				new UnhandledError("org/apache/logging/log4j/BridgeAware", NoClassDefFoundError.class.getName(), noClassDefFoundErrorStackTraceStrings,
-						new UnhandledError("org.apache.logging.log4j.BridgeAware", ClassNotFoundException.class.getName(), classNotFoundExceptionStackTraceStrings, null))
+				new UnhandledError(NoClassDefFoundError.class.getName(), "org/apache/logging/log4j/BridgeAware", noClassDefFoundErrorStackTraceStrings,
+						new UnhandledError(ClassNotFoundException.class.getName(), "org.apache.logging.log4j.BridgeAware", classNotFoundExceptionStackTraceStrings, null))
 								.toThrowable(),
 				setStackTrace(new NoClassDefFoundError("org/apache/logging/log4j/BridgeAware"),
 						noClassDefFoundErrorStackTraceStrings.stream().map(StackTrace::parseElement).toArray(StackTraceElement[]::new))
