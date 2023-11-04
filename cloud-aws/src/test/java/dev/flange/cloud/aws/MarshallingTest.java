@@ -30,7 +30,6 @@ import com.fasterxml.classmate.GenericType;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.type.TypeFactory;
-import com.globalmentor.util.DataException;
 
 /**
  * Tests of {@link Marshalling}.
@@ -83,7 +82,7 @@ public class MarshallingTest {
 	 * @see Marshalling#marshalJson(Object, OutputStream)
 	 */
 	@Test
-	void testMarshalJson() throws IOException, DataException {
+	void testMarshalJson() throws IOException {
 		assertThat(new String(Marshalling.marshalJson(null, new ByteArrayOutputStream()).toByteArray(), UTF_8), is("null"));
 		assertThat(new String(Marshalling.marshalJson("foo", new ByteArrayOutputStream()).toByteArray(), UTF_8), is("\"foo\""));
 		assertThat(new String(Marshalling.marshalJson(Optional.empty(), new ByteArrayOutputStream()).toByteArray(), UTF_8), is("null"));
@@ -95,7 +94,7 @@ public class MarshallingTest {
 	 * @see Marshalling#unmarshalJson(InputStream, GenericType)
 	 */
 	@Test
-	void testUnmarshalJson() throws IOException, DataException {
+	void testUnmarshalJson() throws IOException {
 		assertThat("`null` for expected `void` (e.g. `void` method return value)",
 				Marshalling.unmarshalJson(new ByteArrayInputStream("null".getBytes(UTF_8)), new GenericType<Void>() {}), is(nullValue()));
 		assertThat("`null` for expected non-`void` type (not expected in real life)",
