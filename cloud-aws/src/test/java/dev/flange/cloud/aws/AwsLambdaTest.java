@@ -237,15 +237,22 @@ public class AwsLambdaTest {
 				false);
 		assertEqualUnhandledErrorThrowables("Checked exception with no stack trace.",
 				new UnhandledError(IOException.class.getName(), "I/O problem", List.of(), null).createThrowable(), new IOException("I/O problem"), false);
-		assertEqualUnhandledErrorThrowables("Unknown throwable type gets placeholder.",
+		assertEqualUnhandledErrorThrowables("Unknown throwable type gets placeholder throwable.",
 				new UnhandledError("com.example.NoSuchThrowable", "Unknown", List.of(), null).createThrowable(),
 				new UnavailableMarshalledThrowable("com.example.NoSuchThrowable", "Unknown", null), false);
-		assertEqualUnhandledErrorThrowables("Throwable type without appropriate constructor gets placeholder.",
+		assertEqualUnhandledErrorThrowables("Throwable type without appropriate constructor gets placeholder throwable.",
 				new UnhandledError(PatternSyntaxException.class.getName(), "Bad pattern.", List.of(), null).createThrowable(),
 				new UnavailableMarshalledThrowable(PatternSyntaxException.class.getName(), "Bad pattern.", null), false);
-		assertEqualUnhandledErrorThrowables("Placeholder exception supports mising message.",
+		assertEqualUnhandledErrorThrowables("Placeholder throwable supports missing message.",
 				new UnhandledError(PatternSyntaxException.class.getName(), null, List.of(), null).createThrowable(),
 				new UnavailableMarshalledThrowable(PatternSyntaxException.class.getName(), null, null), false);
+		assertEqualUnhandledErrorThrowables(
+				"Placeholder throwable gets unwrapped.", new UnhandledError(UnavailableMarshalledThrowable.class.getName(),
+						"(%s) Bad argument.".formatted(IllegalArgumentException.class.getName()), List.of(), null).createThrowable(),
+				new IllegalArgumentException("Bad argument."), false);
+		assertEqualUnhandledErrorThrowables("Invalid placeholder throwable gets rewrapped.", new UnhandledError(UnavailableMarshalledThrowable.class.getName(),
+						"Unparsable placeholder message.".formatted(IllegalArgumentException.class.getName()), List.of(), null).createThrowable(),
+				new UnavailableMarshalledThrowable(UnavailableMarshalledThrowable.class.getName(), "Unparsable placeholder message.", null), false);
 		assertEqualUnhandledErrorThrowables("Checked exception with cause and no stack trace.",
 				new UnhandledError(IOException.class.getName(), "I/O problem", List.of(),
 						new UnhandledError(IllegalArgumentException.class.getName(), "Bad input", List.of(), null)).createThrowable(),

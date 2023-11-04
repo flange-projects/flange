@@ -205,6 +205,11 @@ public final class AwsLambda {
 						getLogger().atWarn().log(
 								"Marshalled throwable description cannot be retrieved from message `{}`; wrapping in another layer of placeholder throwable `{}`.",
 								errorMessage, UnavailableMarshalledThrowable.class.getSimpleName());
+						//Note that wrapping the `UnavailableMarshalledThrowable` in itself will give it a valid message,
+						//but attempting to unwrap the exception will cause the same problem at every level, and result in re-wrapping.
+						//However this will be no worse that the original situation (unlikely to begin with) in which the `UnavailableMarshalledThrowable`
+						//already had an invalid message and could not be successfully unwrapped.
+						break; //stop trying to unmarshal the placeholder exception; otherwise this will cause an endless loop 
 					}
 				}
 
