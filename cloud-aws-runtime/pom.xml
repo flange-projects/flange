@@ -20,16 +20,30 @@
 			<artifactId>flange-cloud-aws</artifactId>
 		</dependency>
 
+		<!-- logging -->
 		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-lambda-java-log4j2</artifactId>
 		</dependency>
-
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-slf4j2-impl</artifactId>
 		</dependency>
+		<!--
+			Include latest Log4j dependencies used by `com.amazonaws:aws-lambda-java-log4j2` explicitly.
+			Otherwise older, potentially incompatible versions referenced transitively would be included
+			in applications that use this library, because dependency management is not transtive.
+		-->
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+		</dependency>
 
+		<!-- dependency injection -->
 		<dependency> <!-- TODO include a more lighweight Flange DI implementation -->
 			<groupId>dev.flange</groupId>
 			<artifactId>flange-spring-simple-provider</artifactId>
@@ -41,7 +55,14 @@
 			<dependency>
 				<groupId>com.amazonaws</groupId>
 				<artifactId>aws-lambda-java-log4j2</artifactId>
-				<version>1.5.1</version>
+				<version>1.6.0</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.logging.log4j</groupId>
+				<artifactId>log4j-bom</artifactId>
+				<version>2.21.1</version>
+				<type>pom</type>
+				<scope>import</scope>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
