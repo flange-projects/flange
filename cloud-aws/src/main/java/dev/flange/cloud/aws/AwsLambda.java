@@ -193,7 +193,7 @@ public final class AwsLambda {
 				//the code will later simple re-wrap it in an `UnavailableMarshalledThrowable`. 
 				while(UnavailableMarshalledThrowable.class.getName().equals(errorType)) { //support multiple levels of unwrapping (although that's not expected to occur under normal circumstances)
 					if(errorMessage == null) {
-						getLogger().atWarn().log("Marshalled throwable description missing message; wrapping in another layer of placeholder throwable `%s`.",
+						getLogger().atWarn().log("Marshalled throwable description missing message; wrapping in another layer of placeholder throwable `{}`.",
 								UnavailableMarshalledThrowable.class.getSimpleName());
 					}
 					try {
@@ -203,7 +203,7 @@ public final class AwsLambda {
 						errorMessage = marshalledThrowableDescription.marshalledMessage();
 					} catch(final Exception exception) { //ignore low-level throwables such as `Error`, which are not meant to be caught
 						getLogger().atWarn().log(
-								"Marshalled throwable description cannot be retrieved from message `%s`; wrapping in another layer of placeholder throwable `%s`.",
+								"Marshalled throwable description cannot be retrieved from message `{}`; wrapping in another layer of placeholder throwable `{}`.",
 								errorMessage, UnavailableMarshalledThrowable.class.getSimpleName());
 					}
 				}
@@ -240,7 +240,7 @@ public final class AwsLambda {
 				}
 			} catch(final LinkageError | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException
 					| NoSuchMethodException | SecurityException | IllegalStateException creationException) { //`IllegalStateException` if there is a problem initializing the cause
-				getLogger().atWarn().log("Marshalled AWS Lambda error type `{}` could not be created; using placeholder throwable `%s`.", errorType,
+				getLogger().atWarn().log("Marshalled AWS Lambda error type `{}` could not be created; using placeholder throwable `{}`.", errorType,
 						UnavailableMarshalledThrowable.class.getSimpleName());
 				return new UnavailableMarshalledThrowable(errorType, errorMessage, throwableCause);
 			}
