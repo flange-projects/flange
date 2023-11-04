@@ -250,7 +250,11 @@ public class AwsLambdaTest {
 				new UnhandledError("I/O problem", IOException.class.getName(), List.of(),
 						new UnhandledError("Bad input", IllegalArgumentException.class.getName(), List.of(), null)).createThrowable(),
 				new IOException("I/O problem", new IllegalArgumentException("Bad input")), false);
-
+		assertEqualUnhandledErrorThrowables("Error with no cause constructor and no stack trace.",
+				new UnhandledError("org/apache/logging/log4j/BridgeAware", NoClassDefFoundError.class.getName(), List.of(),
+						new UnhandledError("org.apache.logging.log4j.BridgeAware", ClassNotFoundException.class.getName(), List.of(), null)).toThrowable(),
+				clearStackTrace(new NoClassDefFoundError("org/apache/logging/log4j/BridgeAware"))
+						.initCause(clearStackTrace(new ClassNotFoundException("org.apache.logging.log4j.BridgeAware"))));
 	}
 
 	/** @see AwsLambda.UnhandledError#toThrowable() */
@@ -261,23 +265,38 @@ public class AwsLambdaTest {
 				clearStackTrace(new IllegalArgumentException((String)null)));
 		assertEqualUnhandledErrorThrowables("Checked exception with no stack trace.",
 				new UnhandledError("I/O problem", IOException.class.getName(), List.of(), null).toThrowable(), clearStackTrace(new IOException("I/O problem")));
-		{
-			final List<String> stackTraceStrings = List.of(
-					"dev.flange.example.cloud.hellouser_faas.service.user.impl.UserServiceImpl.findUserProfileByUsername(UserServiceImpl.java:45)",
-					"java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)",
-					"java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source)",
-					"java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source)", "java.base/java.lang.reflect.Method.invoke(Unknown Source)",
-					"dev.flange.cloud.aws.AbstractAwsCloudFunctionServiceHandler.invokeService(AbstractAwsCloudFunctionServiceHandler.java:168)",
-					"dev.flange.cloud.aws.AbstractAwsCloudFunctionServiceHandler.handleRequest(AbstractAwsCloudFunctionServiceHandler.java:105)",
-					"java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)",
-					"java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source)",
-					"java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source)");
-			assertEqualUnhandledErrorThrowables("Unchecked exception with stack trace.",
-					new UnhandledError("test illegal argument exception from user service", IllegalArgumentException.class.getName(), stackTraceStrings, null)
-							.toThrowable(),
-					setStackTrace(new IllegalArgumentException("test illegal argument exception from user service"),
-							stackTraceStrings.stream().map(StackTrace::parseElement).toArray(StackTraceElement[]::new)));
-		}
+		final List<String> illegalArgumentExceptionStackTraceStrings = List.of(
+				"dev.flange.example.cloud.hellouser_faas.service.user.impl.UserServiceImpl.findUserProfileByUsername(UserServiceImpl.java:45)",
+				"java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)",
+				"java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source)",
+				"java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source)", "java.base/java.lang.reflect.Method.invoke(Unknown Source)",
+				"dev.flange.cloud.aws.AbstractAwsCloudFunctionServiceHandler.invokeService(AbstractAwsCloudFunctionServiceHandler.java:168)",
+				"dev.flange.cloud.aws.AbstractAwsCloudFunctionServiceHandler.handleRequest(AbstractAwsCloudFunctionServiceHandler.java:105)",
+				"java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)",
+				"java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source)",
+				"java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source)");
+		assertEqualUnhandledErrorThrowables("Unchecked exception with stack trace.",
+				new UnhandledError("test illegal argument exception from user service", IllegalArgumentException.class.getName(),
+						illegalArgumentExceptionStackTraceStrings, null).toThrowable(),
+				setStackTrace(new IllegalArgumentException("test illegal argument exception from user service"),
+						illegalArgumentExceptionStackTraceStrings.stream().map(StackTrace::parseElement).toArray(StackTraceElement[]::new)));
+		final List<String> noClassDefFoundErrorStackTraceStrings = List.of("org.apache.logging.slf4j.Log4jEventBuilder.log(Log4jEventBuilder.java:112)", //
+				"org.apache.logging.slf4j.Log4jEventBuilder.log(Log4jEventBuilder.java:142)", //
+				"dev.flange.cloud.aws.AbstractAwsCloudFunctionApiStub.invoke(AbstractAwsCloudFunctionApiStub.java:164)", //
+				"dev.flange.cloud.aws.AbstractAwsCloudFunctionApiStub.lambda$invokeAsync$3(AbstractAwsCloudFunctionApiStub.java:96)", //
+				"java.base//java.util.concurrent.CompletableFuture$AsyncSupply.run(Unknown Source)", //
+				"java.base//java.lang.Thread.run(Unknown Source)");
+		final List<String> classNotFoundExceptionStackTraceStrings = List.of("java.base//java.net.URLClassLoader.findClass(Unknown Source)", //
+				"java.base//java.lang.ClassLoader.loadClass(Unknown Source)", //
+				"java.base//java.lang.ClassLoader.loadClass(Unknown Source)");
+		assertEqualUnhandledErrorThrowables("Error with no cause constructor with stack traces.",
+				new UnhandledError("org/apache/logging/log4j/BridgeAware", NoClassDefFoundError.class.getName(), noClassDefFoundErrorStackTraceStrings,
+						new UnhandledError("org.apache.logging.log4j.BridgeAware", ClassNotFoundException.class.getName(), classNotFoundExceptionStackTraceStrings, null))
+								.toThrowable(),
+				setStackTrace(new NoClassDefFoundError("org/apache/logging/log4j/BridgeAware"),
+						noClassDefFoundErrorStackTraceStrings.stream().map(StackTrace::parseElement).toArray(StackTraceElement[]::new))
+								.initCause(setStackTrace(new ClassNotFoundException("org.apache.logging.log4j.BridgeAware"),
+										classNotFoundExceptionStackTraceStrings.stream().map(StackTrace::parseElement).toArray(StackTraceElement[]::new))));
 	}
 
 	/**

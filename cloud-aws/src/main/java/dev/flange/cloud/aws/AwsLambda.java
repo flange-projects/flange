@@ -176,9 +176,8 @@ public final class AwsLambda {
 		 * @implSpec This implementation has special-case support for {@link UnavailableMarshalledThrowable}, allowing it to be full unmarshalled if possible to its
 		 *           represented throwable.
 		 * @implNote This implementation supports instances of {@link Throwable} with a constructor in the form <code>(String message, final Throwable cause)</code>
-		 *           or, if this class has no {@link #cause()} specified, the form <code>(String message, final Throwable cause)</code>. If the actual throwable
-		 *           indicated by {@link #errorType} cannot be instantiated for some reason (e.g. its class cannot be found or it does not have an appropriate
-		 *           constructor), a placeholder exception will be returned.
+		 *           or <code>(String message)</code>. If the actual throwable indicated by {@link #errorType} cannot be instantiated for some reason (e.g. its
+		 *           class cannot be found or it does not have an appropriate constructor), a placeholder exception will be returned.
 		 * @return A bare throwable from the information in this unhandled error, which may be {@link UnavailableMarshalledThrowable} if the indicated exception
 		 *         cannot be created.
 		 */
@@ -227,19 +226,20 @@ public final class AwsLambda {
 
 				//Try to find a constructor in the following order (assuming purposes of the parameters, as most exceptions follow this pattern):
 				//* `(String message, final Throwable cause)`
-				//* `(String message)` (only if `throwableCause` is `null` 
+				//* `(String message)` 
 				try {
 					final Constructor<? extends Throwable> messageCauseConstructor = throwableClass.getDeclaredConstructor(String.class, Throwable.class);
 					return messageCauseConstructor.newInstance(errorMessage, throwableCause);
 				} catch(final NoSuchMethodException noSuchMethodException) {
-					if(throwableCause == null) { //if we don't have a cause, try to construct with just the message
-						final Constructor<? extends Throwable> messageConstructor = throwableClass.getDeclaredConstructor(String.class);
-						return messageConstructor.newInstance(errorMessage);
+					final Constructor<? extends Throwable> messageConstructor = throwableClass.getDeclaredConstructor(String.class);
+					final Throwable throwable = messageConstructor.newInstance(errorMessage);
+					if(throwableCause != null) {
+						throwable.initCause(throwableCause);
 					}
-					throw noSuchMethodException; //otherwise don't even attempt a message-only constructor; let the outer `catch` deal with it
+					return throwable;
 				}
 			} catch(final LinkageError | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException
-					| NoSuchMethodException | SecurityException creationException) {
+					| NoSuchMethodException | SecurityException | IllegalStateException creationException) { //`IllegalStateException` if there is a problem initializing the cause
 				getLogger().atWarn().log("Marshalled AWS Lambda error type `{}` could not be created; using placeholder throwable `%s`.", errorType,
 						UnavailableMarshalledThrowable.class.getSimpleName());
 				return new UnavailableMarshalledThrowable(errorType, errorMessage, throwableCause);
