@@ -16,6 +16,8 @@
 
 package dev.flange.cloud;
 
+import javax.annotation.*;
+
 /**
  * A general base unchecked exception representing a problem with cloud infrastructure, such as provisioning errors, marshalling errors, or cloud SDK errors
  * distinct from purely I/O communication problems.
@@ -34,7 +36,7 @@ public class FlangeCloudException extends RuntimeException {
 	 * Constructs a new exception with the specified detail message.
 	 * @param message The detail message.
 	 */
-	public FlangeCloudException(final String message) {
+	public FlangeCloudException(@Nullable final String message) {
 		super(message);
 	}
 
@@ -44,7 +46,7 @@ public class FlangeCloudException extends RuntimeException {
 	 * @param cause The cause (which is saved for later retrieval by the {@link Throwable#getCause()} method), or <code>null</code> if the cause is nonexistent or
 	 *          unknown.
 	 */
-	public FlangeCloudException(final String message, final Throwable cause) {
+	public FlangeCloudException(@Nullable final String message, @Nullable final Throwable cause) {
 		super(message, cause);
 	}
 
@@ -53,7 +55,7 @@ public class FlangeCloudException extends RuntimeException {
 	 * @param cause The cause (which is saved for later retrieval by the {@link Throwable#getCause()} method), or <code>null</code> if the cause is nonexistent or
 	 *          unknown.
 	 */
-	public FlangeCloudException(final Throwable cause) {
+	public FlangeCloudException(@Nullable final Throwable cause) {
 		super(cause);
 	}
 

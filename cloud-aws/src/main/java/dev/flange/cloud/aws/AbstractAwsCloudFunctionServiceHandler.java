@@ -35,7 +35,7 @@ import javax.annotation.*;
 import com.amazonaws.services.lambda.runtime.*;
 
 import dev.flange.*;
-import dev.flange.cloud.FlangeMarshalException;
+import dev.flange.cloud.*;
 import io.clogr.Clogged;
 
 /**
@@ -89,10 +89,12 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 	 * @param outputStream Receives the marshalled result of the invocation.
 	 * @implNote Unlike the stub, this handler implementation supports any method that returns any type of {@link Future}, not just {@link CompletableFuture}.
 	 * @implNote A return value of {@code Optional<>} will be extracted and its value marshalled, using <code>null</code> for <code>Optional.empty()</code>.
-	 * @throws IllegalStateException if there was an unsupported result or unexpected exception invoking the method.
-	 * @throws IOException if an I/O error occurs.
+	 * @throws IOException if a general I/O error occurs not related to any {@link IOException} thrown by the invoked service.
 	 * @throws FlangeMarshalException if any error related to marshalling occurs, including serialization/deserialization and data conversion/mapping, that isn't
 	 *           specific to I/O.
+	 * @throws MarshalledThrowable if the underlying service method throws a throwable of some sort; this exception serves to marshal that throwable back to the
+	 *           stub.
+	 * @throws FlangeCloudException if some other general error occurs invoking the service method, such as the service method not being accessible.
 	 */
 	@Override
 	public void handleRequest(final InputStream inputStream, final OutputStream outputStream, final Context context) throws IOException {
@@ -102,29 +104,37 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 				.orElseThrow(() -> new IllegalArgumentException("Missing input `%s` method name string.".formatted(PARAM_FLANGE_METHOD_NAME)));
 		final List<?> marshalledMethodArgs = Optional.ofNullable(inputs.get(PARAM_FLANGE_METHOD_ARGS)).flatMap(asInstance(List.class))
 				.orElseThrow(() -> new IllegalArgumentException("Missing input `%s` method arguments list.".formatted(PARAM_FLANGE_METHOD_ARGS)));
-		final Map.Entry<Class<?>, Object> result = invokeService(methodName, marshalledMethodArgs);
+		final Map.Entry<Class<?>, Object> result;
+		try {
+			result = invokeService(methodName, marshalledMethodArgs);
+		} catch(final IllegalArgumentException illegalArgumentException) { //e.g. can't find the method
+			throw new FlangeCloudException(illegalArgumentException);
+		} catch(final InvocationTargetException invocationTargetException) { //e.g. `IllegalArgumentException` or even `IOException`
+			//It doesn't matter whether the result type is a `Future<>` or a direct value;
+			//if the invoked method throws an exception, we'll pass it a long wrapped in a `MarshalledThrowable`.
+			//It is the responsibility of the stub to decide what to do with the exception.
+			//If the method is a direct call, the stub will somehow use the throwable directly (when implemented).
+			//If the method returned a future, the stub will wrap the exception as appropriate for the future.
+			throw new MarshalledThrowable(invocationTargetException.getCause());
+		}
 		final Class<?> methodReturnType = result.getKey();
 		final Object resultValue;
 		if(Future.class.isAssignableFrom(methodReturnType)) {
 			final Future<?> futureResult = (Future<?>)result.getValue();
 			checkState(futureResult != null, "An invoked method future return type `%s` cannot return `null`.", methodReturnType.getClass().getName());
 			try {
-				resultValue = futureResult.get(); //TODO use timeout with `get(long timeout, TimeUnit unit)` 
+				resultValue = futureResult.get(); //TODO use timeout with `get(long timeout, TimeUnit unit)`
+				//TODO add retry on the client side for some of these exceptions
 			} catch(final CancellationException cancellationException) {
-				throw new RuntimeException(
-						"Service operation cancelled while invoking class `%s` method `%s`.".formatted(getService().getClass().getName(), methodName)); //TODO consider retrying on the client side
+				throw new MarshalledThrowable(
+						"Service operation cancelled while invoking class `%s` method `%s`.".formatted(getService().getClass().getName(), methodName),
+						cancellationException);
 			} catch(final InterruptedException interruptedException) {
-				throw new RuntimeException("Interrupted while invoking class `%s` method `%s`.".formatted(getService().getClass().getName(), methodName)); //TODO consider retrying on the client side
+				throw new MarshalledThrowable("Interrupted while invoking class `%s` method `%s`.".formatted(getService().getClass().getName(), methodName),
+						interruptedException);
 			} catch(final ExecutionException executionException) {
-				//TODO check for timeout exception and retry, etc.; actually, don't retry here—retry on the client side
 				final Throwable cause = executionException.getCause();
-				//TODO use Java 21 pattern matching
-				if(cause instanceof IOException ioException) { //decide if we want to throw or wrap IOException; should it be distinguished from an Lambda IOException?
-					throw ioException;
-				} else if(cause instanceof RuntimeException runtimeException) {
-					throw runtimeException; //TODO improve; many of these exceptions should be marshalled back to the caller
-				}
-				throw new IllegalStateException("Unrecognized exception type `%s`.".formatted(cause.getClass().getName())); //TODO improve
+				throw new MarshalledThrowable(cause);
 			}
 		} else { //use a non-`Future<>` result as-is
 			resultValue = result.getValue();
@@ -142,9 +152,12 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 	 * @param marshalledMethodArgs The method arguments as marshalled to the handler; may need further transformation based upon the actual method types.
 	 * @return The result of the invocation as a value mapped to the class representing the raw method return type.
 	 * @throws IllegalArgumentException if the service has multiple methods with the given name.
-	 * @throws IOException if an I/O error occurs.
+	 * @throws FlangeMarshalException if the marshalled method arguments cannot be unmarshalled.
+	 * @throws FlangeCloudException if some other general error occurs invoking the service method, such as the service method not being accessible.
+	 * @throws InvocationTargetException if the underlying service method being invoked throws an exception.
 	 */
-	protected Map.Entry<Class<?>, Object> invokeService(@Nonnull final String methodName, @Nonnull final List<?> marshalledMethodArgs) throws IOException {
+	protected Map.Entry<Class<?>, Object> invokeService(@Nonnull final String methodName, @Nonnull final List<?> marshalledMethodArgs)
+			throws InvocationTargetException {
 		final Class<?> serviceApiClass = getServiceApiClass();
 		final Method method;
 		try {
@@ -167,19 +180,13 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 			//note that the service implementation might be returning a `Future` subtype via covariance, but that should not cause any problems
 			final Object result = method.invoke(getService(), methodArgs.toArray(Object[]::new));
 			return new SimpleImmutableEntry<>(method.getReturnType(), result); //result may be `null`, so `Map.entry()` cannot be used
-		} catch(final InvocationTargetException invocationTargetException) {
-			final Throwable cause = invocationTargetException.getCause();
-			//TODO use Java 21 pattern matching
-			if(cause instanceof IOException ioException) { //decide if we want to throw or wrap IOException; should it be distinguished from an Lambda IOException?
-				throw ioException;
-			} else if(cause instanceof RuntimeException runtimeException) {
-				throw runtimeException;
-			}
-			throw new IllegalStateException("Unrecognized exception type `%s`.".formatted(cause.getClass().getName())); //TODO improve
 		} catch(final IllegalAccessException illegalAccessException) {
-			throw new IllegalStateException("Unable to access class `%s` method `%s`.".formatted(getService().getClass().getName(), methodName)); //TODO improve
+			throw new FlangeCloudException("Unable to access class `%s` method `%s`.".formatted(getService().getClass().getName(), methodName),
+					illegalAccessException);
 		} catch(final IllegalArgumentException illegalArgumentException) {
-			throw illegalArgumentException; //TODO determine best approach; this should probably be caught and marshalled back to the caller
+			throw new FlangeCloudException(
+					"Inappropriate call to class `%s` method `%s`: %s.".formatted(getService().getClass().getName(), methodName, illegalArgumentException.getMessage()),
+					illegalArgumentException);
 		}
 	}
 
