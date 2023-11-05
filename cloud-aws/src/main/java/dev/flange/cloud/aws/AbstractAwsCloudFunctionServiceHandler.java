@@ -26,13 +26,13 @@ import static java.util.Objects.*;
 import java.io.*;
 import java.lang.reflect.*;
 import java.util.*;
-import java.util.AbstractMap.*;
 import java.util.concurrent.*;
 import java.util.stream.Stream;
 
 import javax.annotation.*;
 
 import com.amazonaws.services.lambda.runtime.*;
+import com.globalmentor.collections.Maps;
 
 import dev.flange.*;
 import dev.flange.cloud.*;
@@ -179,7 +179,7 @@ public class AbstractAwsCloudFunctionServiceHandler<API, S> implements RequestSt
 		try {
 			//note that the service implementation might be returning a `Future` subtype via covariance, but that should not cause any problems
 			final Object result = method.invoke(getService(), methodArgs.toArray(Object[]::new));
-			return new SimpleImmutableEntry<>(method.getReturnType(), result); //result may be `null`, so `Map.entry()` cannot be used
+			return Maps.entryOfNullables(method.getReturnType(), result);
 		} catch(final IllegalAccessException illegalAccessException) {
 			throw new FlangeCloudException("Unable to access class `%s` method `%s`.".formatted(getService().getClass().getName(), methodName),
 					illegalAccessException);
