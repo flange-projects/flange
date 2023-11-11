@@ -15,7 +15,7 @@
 	<description>Flange parent POM.</description>
 
 	<properties>
-		<spring.version>6.0.12</spring.version>
+		<spring.version>6.0.13</spring.version>
 	</properties>
 
 	<dependencyManagement>
@@ -37,7 +37,7 @@
 			<dependency>
 				<groupId>com.globalmentor</groupId>
 				<artifactId>globalmentor-base</artifactId>
-				<version>0.17.0-SNAPSHOT</version>
+				<version>0.17.0</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
@@ -51,19 +51,21 @@
 			<dependency>
 				<groupId>io.csar</groupId>
 				<artifactId>csar</artifactId>
-				<version>0.9.0-SNAPSHOT</version>
+				<version>0.9.0</version>
 			</dependency>
 
 			<dependency>
 				<groupId>io.clogr</groupId>
 				<artifactId>clogr-bom</artifactId>
-				<version>0.8.4</version>
+				<version>0.9.0</version>
+				<type>pom</type>
+				<scope>import</scope>
 			</dependency>
 
 			<dependency>
 				<groupId>io.confound</groupId>
 				<artifactId>confound-bom</artifactId>
-				<version>0.7.4</version>
+				<version>0.8.0</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
