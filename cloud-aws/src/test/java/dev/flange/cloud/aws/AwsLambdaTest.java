@@ -18,6 +18,7 @@ package dev.flange.cloud.aws;
 
 import static com.globalmentor.java.Throwables.*;
 import static dev.flange.cloud.aws.AwsLambda.UnhandledError;
+import static io.clogr.Clogr.*;
 import static java.nio.charset.StandardCharsets.*;
 import static org.hamcrest.MatcherAssert.*;
 import static org.hamcrest.Matchers.*;
@@ -39,6 +40,11 @@ import dev.flange.cloud.UnavailableMarshalledThrowable;
  * @author Garret Wilson
  */
 public class AwsLambdaTest {
+
+	@BeforeAll
+	static void suppressLogging() {
+		setSystemDefaultLoggingProviderNop();
+	}
 
 	/**
 	 * Example AWS Lambda response payload for an unhandled {@link IllegalArgumentException}.

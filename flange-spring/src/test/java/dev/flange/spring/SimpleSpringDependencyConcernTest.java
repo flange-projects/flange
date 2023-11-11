@@ -16,6 +16,7 @@
 
 package dev.flange.spring;
 
+import static io.clogr.Clogr.*;
 import static java.util.Objects.*;
 import static org.hamcrest.MatcherAssert.*;
 import static org.hamcrest.Matchers.*;
@@ -31,6 +32,12 @@ import dev.flange.DependencyConcern;
  * @author Garret Wilson
  */
 public class SimpleSpringDependencyConcernTest {
+
+	/** Suppress logging output, in this case from Spring debug logging. */
+	@BeforeAll
+	static void suppressLogging() {
+		setSystemDefaultLoggingProviderNop();
+	}
 
 	/** Tests a happy path of registering a type and then looking it up in an initialized container. */
 	@Test
