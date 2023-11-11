@@ -4,6 +4,8 @@ _Build a monolith. Deploy cloud native._
 
 Flange Cloud transparently transforms and deploys a well-designed monolith application to a distributed, elastic, highly-scalable cloud-native application. Flange merely requires that your application architecture have well-placed “perforations” reflecting a modular design—which in itself is a good practice.
 
+To get up and running quickly, see the [Flange Cloud Quick Start](https://flange.dev/projects/flange-cloud/quick-start) on the official Flange site; as well as the complete, working examples in the `flange-examples` repository.
+
 ### A “Perforated Monolith”
 
 A “perforated monolith” is a single application that can be run as an independent unit, while still following good architectural principles such as separation of concerns and loose coupling. It follows the best practice of programming to interfaces, while additionally minding latency and possible error conditions at interface boundaries (“perforations”) that potentially represent distributed communication.

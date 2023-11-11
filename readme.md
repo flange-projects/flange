@@ -32,7 +32,7 @@ _Flange is in early, rapid development. Currently Flange supports the barest of 
 
 _Build a monolith. Deploy cloud native._
 
-[Flange Cloud](cloud/) transparently transforms and deploys a well-designed monolith application to a distributed, elastic, highly-scalable cloud-native application. See its project page for more information.
+[Flange Cloud](cloud/) transparently transforms and deploys a well-designed monolith application to a distributed, elastic, highly-scalable cloud-native application. See its project page in this repository for source code and technical information; or the [Flange Cloud project site](https://flange.dev/projects/flange-cloud/) for documentation and presentations.
 
 ## Reference
 
